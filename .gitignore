@@ -99,3 +99,8 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Data files folders
+Data
+Data_Test
+users.json

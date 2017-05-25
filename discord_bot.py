@@ -167,7 +167,7 @@ class DiscordBot:
         except KeyboardInterrupt:
             print("Keyboard Interrupt signal")
         finally:
-            print("{0} quitting".format(self.name))
+            print("Bot is quitting")
             loop.run_until_complete(self.client.logout())
             loop.stop()
             loop.close()

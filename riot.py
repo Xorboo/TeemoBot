@@ -6,7 +6,9 @@ import os
 
 
 class RiotAPI:
+    initial_rank = 'no elo'
     ranks = {
+        initial_rank: -1,
         'unranked': 0,
         'bronze': 1,
         'silver': 2,

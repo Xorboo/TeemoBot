@@ -28,6 +28,16 @@ class EuwBot(DiscordBot):
         def on_member_join(member):
             print('User {0} joined to the server {1}'.format(member.name, member.server))
             channel = member.server
+
+            # Force user to have default gray role
+            try:
+                roles_manager = RolesManager(channel.roles)
+                success, role = yield from roles_manager.set_user_initial_role(self.client, member)
+                if not success:
+                    print('ERROR: cant set initial role for user {0} (forbidden)'.format(member))
+            except RolesManager.RoleNotFoundException as e:
+                print('ERROR: Joined user will have default role')
+
             fmt = 'Привет {0.mention}! :poro: Чтобы установить свое эло и игровой ник, напиши {1}. ' + \
                   'Так людям будет проще тебя найти, да и ник не будет таким серым :tw_Kappa:'
             yield from self.message(channel, fmt.format(member, EuwBot.elo_command_hint))
@@ -52,7 +62,7 @@ class EuwBot(DiscordBot):
         output = '# Доступные команды:\n\n'
         for c in ['{0}'.format(k) for k in self.ACTIONS.keys()]:
             output += '* {0} {1}\n'.format(c, self.HELPMSGS.get(c, ""))
-        output += '\nВведи \'{0}help <command>\' для получения большей инфы по каждой команде'.format(DiscordBot.PREFIX)
+        output += '\nВведи \'{0}help <command>\' для получения *большей инфы по каждой команде'.format(DiscordBot.PREFIX)
         msg = yield from self.message(mobj.channel, self.pre_text(output))
         return msg
 
@@ -164,6 +174,11 @@ class RolesManager:
         pass
 
     @asyncio.coroutine
+    def set_user_initial_role(self, client, author):
+        success, role = yield from self.set_user_role(client, author, RiotAPI.initial_rank)
+        return success, role
+
+    @asyncio.coroutine
     def set_user_role(self, client, author, role_name):
         role = self.get_role(role_name)
         new_roles = self.get_new_user_roles(author.roles, role)
@@ -175,6 +190,7 @@ class RolesManager:
         return False, role
 
     def get_role(self, role_name):
+        role_name = role_name.lower()
         for r in self.rank_roles:
             if r.name.lower() == role_name:
                 return r

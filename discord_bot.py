@@ -115,12 +115,6 @@ class DiscordBot:
             print(exc_info())
         return on_error
 
-    def event_join(self):
-        @asyncio.coroutine
-        def on_member_join(member):
-            print('User {0} joined to the server {1}'.format(member.name, member.server))
-        return on_member_join
-
     def event_message(self):
         """Change this to change overall on message behavior"""
         @asyncio.coroutine
@@ -142,9 +136,9 @@ class DiscordBot:
         Set up all events for the Bot
         You can override each event_*() method in the class def
         """
+        self.client.get_all_members()
         self.client.event(self.event_message())
-        self.client.event(self.event_error())
-        self.client.event(self.event_join())
+        #self.client.event(self.event_error())
         self.client.event(self.event_ready())
 
     def run(self):

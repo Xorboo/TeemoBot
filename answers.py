@@ -102,9 +102,13 @@ class Answers:
     }
 
     @staticmethod
-    def __main_answer(role):
+    def __main_answer(role, emoji):
         possible = Answers.role_answers[role]
-        return random.choice(possible)
+        answer = random.choice(possible)
+        emoji_name = role.lower()
+        if emoji_name == 'unranked':
+            emoji_name = 'amumu'
+        return answer + emoji.get(emoji_name)
 
     @staticmethod
     def __comment_answer(role):
@@ -114,8 +118,8 @@ class Answers:
         return ''
 
     @staticmethod
-    def generate_answer(member, role):
-        main_answer = Answers.__main_answer(role)
+    def generate_answer(member, role, emoji):
+        main_answer = Answers.__main_answer(role, emoji)
         comment = Answers.__comment_answer(role)
         answer = 'Окей, {0}{1}{2}'.format(member.mention, main_answer, comment)
         return answer

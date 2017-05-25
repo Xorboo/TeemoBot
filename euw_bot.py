@@ -5,6 +5,7 @@ from discord_bot import DiscordBot
 from riot import RiotAPI
 from users import Users
 from answers import Answers
+from emojis import Emojis
 
 
 class EuwBot(DiscordBot):
@@ -17,12 +18,58 @@ class EuwBot(DiscordBot):
         super(EuwBot, self).__init__(token_file_path)
         self.riot_api = RiotAPI(data_folder)
         self.users = Users(data_folder)
+        self.emoji = Emojis()
 
     @property
     def all_tokens_are_valid(self):
         return self.token_is_valid and self.riot_api.key_is_valid
 
-    # Override from DiscordBot
+    def setup_events(self):
+        super().setup_events()
+
+        self.client.event(self.server_join())
+        self.client.event(self.server_remove())
+        self.client.event(self.event_join())
+
+    def event_ready(self):
+        @asyncio.coroutine
+        def on_ready():
+            self.display_no_servers()
+            yield from self.set_status(self.STATUS)
+            print("Connection status: {0}".format(self.client.is_logged_in))
+
+            for s in self.client.servers:
+                self.emoji.update_server(s)
+
+                print('Checking for users with no elo set')
+                try:
+                    rm = RolesManager(s.roles)
+                    for member in s.members:
+                        if member != self.client.user:
+                            yield from self.check_for_no_elo(member, rm)
+                except RolesManager.RoleNotFoundException as e:
+                    print('Couldnt find default role, not setting it')
+                print('Done!')
+        return on_ready
+
+    @asyncio.coroutine
+    def check_for_no_elo(self, member, roles_manager):
+        if not roles_manager.has_any_role(member):
+            print('Setting \'no_elo\' role for {0}'.format(member))
+            yield from roles_manager.set_user_initial_role(self.client, member)
+
+    def server_join(self):
+        @asyncio.coroutine
+        def on_server_join(server):
+            self.emoji.update_server(server)
+        return on_server_join
+
+    def server_remove(self):
+        @asyncio.coroutine
+        def on_server_remove(server):
+            self.emoji.remove_server(server)
+        return on_server_remove
+
     def event_join(self):
         @asyncio.coroutine
         def on_member_join(member):
@@ -38,9 +85,11 @@ class EuwBot(DiscordBot):
             except RolesManager.RoleNotFoundException as e:
                 print('ERROR: Joined user will have default role')
 
-            fmt = 'Привет {0.mention}! :poro: Чтобы установить свое эло и игровой ник, напиши {1}. ' + \
-                  'Так людям будет проще тебя найти, да и ник не будет таким серым :tw_Kappa:'
-            yield from self.message(channel, fmt.format(member, EuwBot.elo_command_hint))
+            fmt = 'Привет {0.mention}! {1} Чтобы установить свое эло и игровой ник, напиши {2}. ' + \
+                  'Так людям будет проще тебя найти, да и ник не будет таким серым (как твоя жизнь{3})'
+            em = self.emoji.s(channel)
+            text = fmt.format(member, em.poro, EuwBot.elo_command_hint, em.kappa)
+            yield from self.message(channel, text)
         return on_member_join
 
     @DiscordBot.action('<Команда>')
@@ -62,7 +111,8 @@ class EuwBot(DiscordBot):
         output = '# Доступные команды:\n\n'
         for c in ['{0}'.format(k) for k in self.ACTIONS.keys()]:
             output += '* {0} {1}\n'.format(c, self.HELPMSGS.get(c, ""))
-        output += '\nВведи \'{0}help <command>\' для получения *большей инфы по каждой команде'.format(DiscordBot.PREFIX)
+        output += '\nВведи \'{0}help <command>\' для получения *большей инфы по каждой команде.'\
+            .format(DiscordBot.PREFIX)
         msg = yield from self.message(mobj.channel, self.pre_text(output))
         return msg
 
@@ -110,7 +160,7 @@ class EuwBot(DiscordBot):
             # Replying
             mention = mobj.author.mention
             if role_success:
-                answer = Answers.generate_answer(mobj.author, new_role.name)
+                answer = Answers.generate_answer(mobj.author, new_role.name, self.emoji.s(mobj.channel))
                 yield from self.message(mobj.channel, answer)
             else:
                 yield from self.message(mobj.channel,
@@ -174,20 +224,26 @@ class RolesManager:
         pass
 
     @asyncio.coroutine
-    def set_user_initial_role(self, client, author):
-        success, role = yield from self.set_user_role(client, author, RiotAPI.initial_rank)
+    def set_user_initial_role(self, client, member):
+        success, role = yield from self.set_user_role(client, member, RiotAPI.initial_rank)
         return success, role
 
     @asyncio.coroutine
-    def set_user_role(self, client, author, role_name):
+    def set_user_role(self, client, member, role_name):
         role = self.get_role(role_name)
-        new_roles = self.get_new_user_roles(author.roles, role)
+        new_roles = self.get_new_user_roles(member.roles, role)
         try:
-            yield from client.replace_roles(author, *new_roles)
+            yield from client.replace_roles(member, *new_roles)
             return True, role
         except discord.errors.Forbidden as e:
             print('Error setting role: {0}'.format(e))
         return False, role
+
+    def has_any_role(self, member):
+        for role in member.roles:
+            if role.id in self.rank_ids:
+                return True
+        return False
 
     def get_role(self, role_name):
         role_name = role_name.lower()

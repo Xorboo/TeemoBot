@@ -5,91 +5,94 @@ import json
 import os
 
 
-ranks = {
-    'error': -1,
-    'unranked': 0,
-    'bronze': 1,
-    'silver': 2,
-    'gold': 3,
-    'platinum': 4,
-    'diamond': 5,
-    'master': 6,
-    'challenger': 7,
-}
+class RiotAPI:
+    ranks = {
+        'unranked': 0,
+        'bronze': 1,
+        'silver': 2,
+        'gold': 3,
+        'platinum': 4,
+        'diamond': 5,
+        'master': 6,
+        'challenger': 7,
+    }
 
-key_file_name = 'riot_api_key.txt'
-key_full_path = ''
-riot_api_key = ''
-riot_key_request = '?api_key=' + riot_api_key
-base_url = 'https://euw1.api.riotgames.com/'
-summoner_url = 'lol/summoner/v3/summoners/'
-league_url = 'api/lol/euw/v2.5/league/'
+    key_file_name = 'riot_api_key.txt'
+    base_url = 'https://euw1.api.riotgames.com/'
+    summoner_url = 'lol/summoner/v3/summoners/'
+    league_url = 'api/lol/euw/v2.5/league/'
 
+    def __init__(self, data_folder):
+        self.riot_api_key = ''
+        self.load_key(data_folder)
 
-def load_key(data_folder):
-    global key_full_path, riot_api_key, riot_key_request
-    key_full_path = os.path.join(data_folder, key_file_name)
-    file_contents = ''
-    try:
-        f = open(key_full_path, 'r')
-        riot_api_key = f.read()
-        riot_key_request = '?api_key=' + riot_api_key
-        f.close()
-        print('Riot API key loaded: ' + riot_api_key)
-    except IOError as e:
-        print('ERROR: Couldn\'t open riot api key file, create file with the api key: ' + key_full_path)
-        print(e)
+    @property
+    def riot_key_request(self):
+        return '?api_key=' + self.riot_api_key
 
+    @property
+    def key_is_valid(self):
+        return bool(self.riot_api_key)
 
-def send_request(text):
-    url = base_url + text + riot_key_request
-    print('Request URL: ' + url)
-    content = None
+    def load_key(self, data_folder):
+        key_full_path = os.path.join(data_folder, RiotAPI.key_file_name)
+        file_contents = ''
+        try:
+            f = open(key_full_path, 'r')
+            self.riot_api_key = f.read()
+            f.close()
+            print('Riot API key loaded: ' + self.riot_api_key)
+        except IOError as e:
+            print('ERROR: Couldn\'t open riot api key file, create file with the api key: ' + key_full_path)
+            print(e)
 
-    try:
-        content = urllib.request.urlopen(url).read().decode()
-    except urllib.error.HTTPError as e:
-        # print(e.reason)
-        print(e)
-    # print('Result: ' + str(content))
-    return content
+    def send_request(self, text):
+        content = None
+        try:
+            if not self.key_is_valid:
+                print('Key is not set');
+                return  content
+            url = RiotAPI.base_url + text + self.riot_key_request
+            print('Request URL: ' + url)
+            content = urllib.request.urlopen(url).read().decode()
+        except urllib.error.HTTPError as e:
+            print(e)
+        return content
 
+    def get_user_id(self, nickname):
+        nickname = nickname.lower()
+        user_content = self.send_request(RiotAPI.summoner_url + 'by-name/' + urllib.parse.quote(nickname))
+        if user_content is None:
+            print('Couldn\'t find user ' + nickname)
+            raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
 
-def get_user_id(nickname):
-    nickname = nickname.lower()
-    # url_nickname = nickname.replace(' ', '%20')
-    user_content = send_request(summoner_url + 'by-name/' + quote(nickname))
-    if user_content is None:
-        print('Couldn\'t find user ' + nickname)
-        return -1, nickname
+        user_data_json = json.loads(user_content)
+        return user_data_json['id'], user_data_json['name']
 
-    user_data_json = json.loads(user_content)
-    return user_data_json['id'], user_data_json['name']
+    def get_user_elo(self, nickname):
+        user_id, real_name = self.get_user_id(nickname)
+        user_id_str = str(user_id)
 
+        ranks_content = self.send_request(RiotAPI.league_url + 'by-summoner/' + user_id_str)
+        if ranks_content is None:
+            return 'unranked', user_id, real_name
 
-def get_user_elo(nickname):
-    user_id, real_name = get_user_id(nickname)
-    if user_id == -1:
-        return 'error', nickname
+        ranks_data = json.loads(ranks_content)
 
-    user_id_str = str(user_id)
+        game_modes = ranks_data[user_id_str]
+        best_rank = 'unranked'
+        best_rank_id = RiotAPI.ranks[best_rank]
+        for mode in game_modes:
+            rank = mode['tier'].lower()
+            rank_id = RiotAPI.ranks[rank]
+            if rank_id > best_rank_id:
+                best_rank = rank
+                best_rank_id = rank_id
 
-    ranks_content = send_request(league_url + 'by-summoner/' + user_id_str)
-    if ranks_content is None:
-        return 'unranked', real_name
+        if best_rank == 'master' or best_rank == 'challenger':
+            print('User requested master+, putting him to bronze')
+            best_rank = 'bronze'
+        return best_rank, user_id, real_name
 
-    ranks_data = json.loads(ranks_content)
-
-    game_modes = ranks_data[user_id_str]
-    best_rank = 'unranked'
-    best_rank_id = ranks[best_rank]
-    for mode in game_modes:
-        rank = mode['tier'].lower()
-        rank_id = ranks[rank]
-        if rank_id > best_rank_id:
-            best_rank = rank
-            best_rank_id = rank_id
-
-    if best_rank == 'master' or best_rank == 'challenger':
-        best_rank = 'bronze'
-    return best_rank, real_name
+    class UserIdNotFoundException(Exception):
+        pass

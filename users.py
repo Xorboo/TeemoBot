@@ -2,46 +2,53 @@ import json
 import os
 
 
-# Сохраненные юзеры, потом будем обновлять их автоматически
-saved_users = None
+class Users:
+    file_name = 'users.json'
 
-file_name = 'users.json'
-full_path = file_name
+    def __init__(self, data_folder):
+        self.users = []
+        self.full_path = os.path.join(data_folder, Users.file_name)
+        self.load_users(data_folder)
 
+    def load_users(self, data_folder):
+        file_contents = ''
+        try:
+            f = open(self.full_path, 'r')
+            file_contents = f.read()
+            f.close()
+            print('Users data loaded from ' + self.full_path)
+            if file_contents:
+                self.users = json.loads(file_contents)
+                print('Loaded {0} users.'.format(len(self.users)))
+        except IOError as e:
+            print('WARNING: Couldn\'t open users file, nothing loaded!')
+            print(e)
 
-def load_users(data_folder):
-    global full_path
-    full_path = os.path.join(data_folder, file_name)
-    file_contents = ''
-    try:
-        f = open(full_path, 'r')
-        file_contents = f.read()
+    def get_user(self, member):
+        user_id = member.id
+        server_id = member.server.id
+        user = next((u for u in self.users if u['discord_uID'] == user_id and u['discord_sID'] == server_id), None)
+        return user
+
+    def add_user(self, member, game_user_id, nickname, rank):
+        if self.users is None:
+            self.users = {}
+
+        user = self.get_user(member)
+        if user is None:
+            user = {
+                'discord_uID': member.id,
+                'discord_sID': member.server.id
+            }
+            self.users.append(user)
+        user['game_id'] = game_user_id
+        user['nickname'] = nickname
+        user['rank'] = rank
+
+        self.save_users()
+
+    def save_users(self):
+        f = open(self.full_path, 'w')
+        file_contents = json.dumps(self.users)
+        f.write(file_contents)
         f.close()
-        print('Users data loaded from ' + full_path)
-    except IOError as e:
-        print('WARNING: Couldn\'t open users file, nothing loaded!')
-        print(e)
-
-    global saved_users
-    if file_contents is not None and file_contents != '':
-        saved_users = json.loads(file_contents)
-        print('Loaded ' + str(len(saved_users)) + ' users.')
-    else:
-        saved_users = {}
-
-
-def add_user(member, nickname, rank):
-    global full_path
-    global saved_users
-    if saved_users is None:
-        saved_users = {}
-
-    saved_users[member.id] = {
-        'nickname': nickname,
-        'rank': rank
-    }
-    f = open(full_path, 'w')
-    file_contents = json.dumps(saved_users)
-    f.write(file_contents)
-    f.close()
-

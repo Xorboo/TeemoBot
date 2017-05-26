@@ -51,7 +51,7 @@ class EuwBot(DiscordBot):
 
     @asyncio.coroutine
     def check_no_elo_members(self, s):
-        self.logger.error('Checking for users with no elo set on server \'%s\'...', s)
+        self.logger.info('Checking for users with no elo set on server \'%s\'...', s)
         no_elo_members = []
         try:
             roles_manager = RolesManager(s.roles)
@@ -190,7 +190,7 @@ class EuwBot(DiscordBot):
             # Replying
             mention = mobj.author.mention
             if role_success:
-                answer = Answers.generate_answer(mobj.author, new_role.name, self.emoji.s(mobj.channel))
+                answer = Answers.generate_answer(mobj.author, new_role.name, self.emoji.s(mobj.channel.server))
                 yield from self.message(mobj.channel, answer)
             else:
                 yield from self.message(mobj.channel,

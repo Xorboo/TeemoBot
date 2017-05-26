@@ -11,6 +11,7 @@ if [[ -n "$1" ]]; then
 			echo "Bot not found, restarting it with data: $1"
 			echo "Calling: $DIR/run.sh $1"
 			$DIR/run.sh $DIR/$1
+			sleep 5
 		fi
 	done
 else

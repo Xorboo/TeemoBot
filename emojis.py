@@ -19,6 +19,7 @@ class Emojis:
         if server.id in self.servers:
             return self.servers[server.id]
         else:
+            self.logger.warning('Creating empty EmojiList for server \'%s\'', server)
             return Emojis.EmojiList()
 
     class EmojiList:
@@ -39,14 +40,17 @@ class Emojis:
 
         def __init__(self, server=None):
             for em in self.required_emojis:
-                setattr(self, self.required_emojis[em], '')
+                em_tag = self.required_emojis[em]
+                setattr(self, em_tag, '')
 
             if server is not None:
                 for em in server.emojis:
                     if em.name in self.required_emojis:
-                        self.logger.info('Found emoji %s', em)
                         em_tag = self.required_emojis[em.name]
+                        self.logger.info('Found emoji %s for \'%s\'', em, em_tag)
                         setattr(self, em_tag, str(em))
+            else:
+                self.logger.warning('Creating empty EmojiList')
 
         def get(self, emoji_name):
             emoji_text = getattr(self, emoji_name, '')

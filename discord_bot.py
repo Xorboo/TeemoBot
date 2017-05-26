@@ -1,17 +1,20 @@
 # Based on https://github.com/sleibrock/discord-bots/blob/master/bots/Bot.py
 
 from sys import exc_info
+import logging
 import asyncio
 import discord
 from discord import Client, Game
 
 
 class DiscordBot:
-    PREFIX = "!"
+    logger = logging.getLogger(__name__)
+
+    PREFIX = '!'
     MESSAGE_LISTENERS = list()
     ACTIONS = dict()
     HELPMSGS = dict()
-    STATUS = "Ururu"
+    STATUS = 'with ururus'
 
     @staticmethod
     def pre_text(msg, lang=None):
@@ -22,7 +25,7 @@ class DiscordBot:
         return s.format(msg.rstrip().strip("\n").replace("\t", ""))
 
     @staticmethod
-    def action(help_msg=""):
+    def action(help_msg=''):
         """
         Decorator to register functions into the action map
         This is bound to static as we can't use an instance object's method
@@ -67,10 +70,10 @@ class DiscordBot:
         try:
             with open(token_file_path, 'r') as token_file:
                 token = token_file.read()
-                print('Discord token loaded: ' + token)
+                DiscordBot.logger.info('Discord token loaded: \'%s\'', token)
         except IOError as e:
-            print('ERROR: Couldn\'t open discord token file, create file with the token key: ' + token_file_path)
-            print(e)
+            DiscordBot.logger.error('Couldn\'t open discord token file, '
+                                    'create file with the token key in \'%s\', error: %s', token_file_path, e)
         return token
 
     @asyncio.coroutine
@@ -89,7 +92,8 @@ class DiscordBot:
         that will let you add the bot to one of your current servers
         """
         if not self.client.servers:
-            print("Join link: {0}".format(discord.utils.oauth_url(self.client.user.id)))
+            url = discord.utils.oauth_url(self.client.user.id)
+            self.logger.warning('Bot is not invited to any channel. Join link: %s', url)
         return
 
     @asyncio.coroutine
@@ -104,26 +108,28 @@ class DiscordBot:
         def on_ready():
             self.display_no_servers()
             yield from self.set_status(self.STATUS)
-            print("Connection status: {0}".format(self.client.is_logged_in))
+            self.logger.info('Connection status: {0}'.format(self.client.is_logged_in))
         return on_ready
 
     def event_error(self):
         """"Change this for better error logging if needed"""
         @asyncio.coroutine
         def on_error(evt, *args, **kwargs):
-            print("Discord error in '{0}''".format(evt))
-            print(exc_info())
+            self.logger.error('Discord error in \'{0}\''.format(evt))
+            self.logger.error(exc_info())
         return on_error
 
     def event_message(self):
         """Change this to change overall on message behavior"""
         @asyncio.coroutine
         def on_message(msg):
+            self.logger.debug('Recieved message: %s', msg)
+
             # Call all message listeners
             [msg_listener(self, msg) for msg_listener in DiscordBot.MESSAGE_LISTENERS]
 
             # Parse the message for special commands
-            args = msg.content.strip().split(" ")
+            args = msg.content.strip().split(' ')
             key = args.pop(0).lower()  # messages sent can't be empty
             if key in self.ACTIONS:
                 result = yield from self.ACTIONS[key](self, args, msg)
@@ -138,7 +144,7 @@ class DiscordBot:
         """
         self.client.get_all_members()
         self.client.event(self.event_message())
-        #self.client.event(self.event_error())
+        # self.client.event(self.event_error())
         self.client.event(self.event_ready())
 
     def run(self):
@@ -147,7 +153,7 @@ class DiscordBot:
         Set up all Discord client events and then run the loop
         """
         if not self.token_is_valid:
-            print('Cant run the bot, token is not loaded')
+            DiscordBot.logger.error('Cant run the bot, token is not loaded')
             return
 
         self.setup_events()
@@ -155,13 +161,13 @@ class DiscordBot:
             loop = asyncio.get_event_loop()
             loop.run_until_complete(self.client.start(self.token))
         except Exception as e:
-            print("Caught an exception: {0}".format(e))
+            DiscordBot.logger.error('Caught an exception: {0}', e)
         except SystemExit:
-            print("System Exit signal")
+            DiscordBot.logger.warning('System Exit signal')
         except KeyboardInterrupt:
-            print("Keyboard Interrupt signal")
+            DiscordBot.logger.warning('Keyboard Interrupt signal')
         finally:
-            print("Bot is quitting")
+            DiscordBot.logger.info('Bot is quitting')
             loop.run_until_complete(self.client.logout())
             loop.stop()
             loop.close()

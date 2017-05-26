@@ -1,5 +1,6 @@
 import asyncio
 import os
+import logging
 import discord
 from discord_bot import DiscordBot
 from riot import RiotAPI
@@ -9,6 +10,8 @@ from emojis import Emojis
 
 
 class EuwBot(DiscordBot):
+    logger = logging.getLogger(__name__)
+
     token_file_name = 'discord_token.txt'
 
     elo_command_hint = '`!nick свой_ник_на_весте`, например `!nick xXNagibatorXx`'
@@ -34,46 +37,66 @@ class EuwBot(DiscordBot):
     def event_ready(self):
         @asyncio.coroutine
         def on_ready():
+            self.logger.info('Connection status: %s', self.client.is_logged_in)
+
             self.display_no_servers()
-            yield from self.set_status(self.STATUS)
-            print("Connection status: {0}".format(self.client.is_logged_in))
+            # yield from self.set_status(self.STATUS)
 
             for s in self.client.servers:
+                self.logger.info('Updating data for server \'%s\'...', s)
                 self.emoji.update_server(s)
-
-                print('Checking for users with no elo set')
-                try:
-                    rm = RolesManager(s.roles)
-                    for member in s.members:
-                        if member != self.client.user:
-                            yield from self.check_for_no_elo(member, rm)
-                except RolesManager.RoleNotFoundException as e:
-                    print('Couldnt find default role, not setting it')
-                print('Done!')
+                yield from self.check_no_elo_members(s)
+            self.logger.info('Finished \'on_ready()\'')
         return on_ready
+
+    @asyncio.coroutine
+    def check_no_elo_members(self, s):
+        self.logger.error('Checking for users with no elo set on server \'%s\'...', s)
+        no_elo_members = []
+        try:
+            roles_manager = RolesManager(s.roles)
+            for member in s.members:
+                if member != self.client.user and not roles_manager.has_any_role(member):
+                    no_elo_members.append(member)
+            if no_elo_members:
+                current = 1
+                total = len(no_elo_members)
+                self.logger.info('Found %s members with no elo set, setting their elo...', total)
+                for member in no_elo_members:
+                    if current % 10 == 0:
+                        self.logger.info('Setting for %s/%s...', current, total)
+                    yield from roles_manager.set_user_initial_role(self.client, member)
+                    current += 1
+                self.logger.info('\'No elo\' set for all %s users', total)
+            else:
+                self.logger.info('No members with no elo found.')
+        except RolesManager.RoleNotFoundException as e:
+            self.logger.error('Couldnt find default role, not setting it.')
 
     @asyncio.coroutine
     def check_for_no_elo(self, member, roles_manager):
         if not roles_manager.has_any_role(member):
-            print('Setting \'no_elo\' role for {0}'.format(member))
+            self.logger.debug('Setting \'no_elo\' role for %s', member)
             yield from roles_manager.set_user_initial_role(self.client, member)
 
     def server_join(self):
         @asyncio.coroutine
         def on_server_join(server):
+            self.logger.info('Bot joined to the server \'%s\'', server)
             self.emoji.update_server(server)
         return on_server_join
 
     def server_remove(self):
         @asyncio.coroutine
         def on_server_remove(server):
+            self.logger.info('Bot left the server \'%s\'', server)
             self.emoji.remove_server(server)
         return on_server_remove
 
     def event_join(self):
         @asyncio.coroutine
         def on_member_join(member):
-            print('User {0} joined to the server {1}'.format(member.name, member.server))
+            self.logger.info('User \'%s\' joined to the server \'%s\'', member.name, member.server)
             channel = member.server
 
             # Force user to have default gray role
@@ -81,9 +104,9 @@ class EuwBot(DiscordBot):
                 roles_manager = RolesManager(channel.roles)
                 success, role = yield from roles_manager.set_user_initial_role(self.client, member)
                 if not success:
-                    print('ERROR: cant set initial role for user {0} (forbidden)'.format(member))
+                    self.logger.error('Cant set initial role for user \'%s\' (forbidden)', member)
             except RolesManager.RoleNotFoundException as e:
-                print('ERROR: Joined user will have default role')
+                self.logger.error('Joined user will have default role (no-elo role was not found)')
 
             fmt = 'Привет {0.mention}! {1} Чтобы установить свое эло и игровой ник, напиши {2}. ' + \
                   'Так людям будет проще тебя найти, да и ник не будет таким серым (как твоя жизнь{3})'
@@ -100,6 +123,7 @@ class EuwBot(DiscordBot):
         """
         if args:
             key = '{0}{1}'.format(DiscordBot.PREFIX, args[0])
+            self.logger.info('Sendin help for key \'%s\'', key)
             if key in self.ACTIONS:
                 command_help = self.HELPMSGS.get(key, '')
                 if command_help:
@@ -108,6 +132,10 @@ class EuwBot(DiscordBot):
                 text = self.pre_text('Подсказка для \'{0}{1}\':{2}'.format(key, command_help, command_doc))
                 msg = yield from self.message(mobj.channel, text)
                 return msg
+            else:
+                self.logger.info('No help for key \'%s\' found', key)
+
+        self.logger.info('Sending generic help')
         output = '# Доступные команды:\n\n'
         for c in ['{0}'.format(k) for k in self.ACTIONS.keys()]:
             output += '* {0} {1}\n'.format(c, self.HELPMSGS.get(c, ""))
@@ -129,8 +157,10 @@ class EuwBot(DiscordBot):
         """
         try:
             nickname = ' '.join(args).strip()
+            self.logger.info('Recieved !nick command for \'%s\'', nickname)
+
             if not nickname:
-                yield from self.message(mobj.channel, 'Ник то напиши, ну...')
+                yield from self.message(mobj.channel, 'Ник то напиши после `!nick`, ну...')
                 return
 
             yield from self.client.send_typing(mobj.channel)
@@ -150,11 +180,11 @@ class EuwBot(DiscordBot):
             new_name = nick_manager.get_combined_nickname(mobj.author)
             if new_name:
                 try:
-                    print('Setting nickname: ' + new_name)
+                    self.logger.info('Setting nickname: \'%s\' for \'%s\'', new_name, mobj.author)
                     yield from self.client.change_nickname(mobj.author, new_name)
                     nick_success = True
                 except discord.errors.Forbidden as e:
-                    print('Error setting nickname: {0}'.format(e))
+                    self.logger.error('Error setting nickname: %s', e)
                     nick_success = False
 
             # Replying
@@ -188,6 +218,7 @@ class EuwBot(DiscordBot):
         Установить свой базовый ник (тот, что перед скобками). Если он совпадает с игровым ником, то скобок не будет.
         """
         base_name = NicknamesManager.clean_name(' '.join(args))
+        self.logger.info('Setting base name \'%s\' for \'%s\'', base_name, mobj.author)
 
         nick_manager = NicknamesManager(self.users)
         game_name = nick_manager.get_ingame_nickname(mobj.author)
@@ -197,11 +228,11 @@ class EuwBot(DiscordBot):
             new_name = base_name
 
         try:
-            print('Setting nickname: ' + new_name)
+            self.logger.info('Setting nickname: \'%s\'', new_name)
             yield from self.client.change_nickname(mobj.author, new_name)
             nick_success = True
         except discord.errors.Forbidden as e:
-            print('Error setting nickname: {0}'.format(e))
+            self.logger.error('Error setting nickname: %s', e)
             nick_success = False
 
         mention = mobj.author.mention
@@ -213,7 +244,10 @@ class EuwBot(DiscordBot):
 
 
 class RolesManager:
+    logger = logging.getLogger(__name__)
+
     def __init__(self, server_roles):
+        self.logger.info('Parsing server roles...')
         self.rank_roles = []
         self.rank_ids = []
         for r in server_roles:
@@ -230,13 +264,15 @@ class RolesManager:
 
     @asyncio.coroutine
     def set_user_role(self, client, member, role_name):
+        self.logger.info('Setting role \'%s\' for \'%s\'', role_name, member)
+
         role = self.get_role(role_name)
         new_roles = self.get_new_user_roles(member.roles, role)
         try:
             yield from client.replace_roles(member, *new_roles)
             return True, role
         except discord.errors.Forbidden as e:
-            print('Error setting role: {0}'.format(e))
+            self.logger.error('Error setting role: %s', e)
         return False, role
 
     def has_any_role(self, member):

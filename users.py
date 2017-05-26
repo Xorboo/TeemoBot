@@ -1,28 +1,32 @@
 import json
 import os
+import logging
 
 
 class Users:
+    logger = logging.getLogger(__name__)
+
     file_name = 'users.json'
 
     def __init__(self, data_folder):
         self.users = []
         self.full_path = os.path.join(data_folder, Users.file_name)
-        self.load_users(data_folder)
+        self.load_users()
 
-    def load_users(self, data_folder):
-        file_contents = ''
+    def load_users(self):
+        self.logger.info('Loading users list from \'%s\'', self.full_path)
         try:
             f = open(self.full_path, 'r')
             file_contents = f.read()
             f.close()
-            print('Users data loaded from ' + self.full_path)
+            self.logger.info('Users data loaded')
             if file_contents:
                 self.users = json.loads(file_contents)
-                print('Loaded {0} users.'.format(len(self.users)))
+                self.logger.info('Loaded %s users.', len(self.users))
+            else:
+                self.logger.warning('No data was loaded from \'%s\'', self.full_path)
         except IOError as e:
-            print('WARNING: Couldn\'t open users file, nothing loaded!')
-            print(e)
+            self.logger.warning('Couldn\'t open users file, nothing loaded, error: \'%s\'', e)
 
     def get_user(self, member):
         user_id = member.id
@@ -36,6 +40,7 @@ class Users:
 
         user = self.get_user(member)
         if user is None:
+            self.logger.info('Adding new user \'%s\', nickname: \'%s\'', member, nickname)
             user = {
                 'discord_uID': member.id,
                 'discord_sID': member.server.id
@@ -48,6 +53,7 @@ class Users:
         self.save_users()
 
     def save_users(self):
+        self.logger.info('Saving users data to file \'%s\'', self.full_path)
         f = open(self.full_path, 'w')
         file_contents = json.dumps(self.users)
         f.write(file_contents)

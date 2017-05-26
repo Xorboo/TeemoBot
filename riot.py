@@ -1,11 +1,14 @@
+import os
+import json
+import logging
 import urllib.request
 import urllib.error
 from urllib.parse import quote
-import json
-import os
 
 
 class RiotAPI:
+    logger = logging.getLogger(__name__)
+
     initial_rank = 'no elo'
     ranks = {
         initial_rank: -1,
@@ -38,40 +41,41 @@ class RiotAPI:
 
     def load_key(self, data_folder):
         key_full_path = os.path.join(data_folder, RiotAPI.key_file_name)
-        file_contents = ''
+        self.logger.info('Loading RiotAPI key from \'%s\'', key_full_path)
         try:
             f = open(key_full_path, 'r')
             self.riot_api_key = f.read()
             f.close()
-            print('Riot API key loaded: ' + self.riot_api_key)
+            self.logger.info('Riot API key loaded: \'%s\'', self.riot_api_key)
         except IOError as e:
-            print('ERROR: Couldn\'t open riot api key file, create file with the api key: ' + key_full_path)
-            print(e)
+            self.logger.error('Couldn\'t open riot api key file, create file with the api key in \'%s\'. Error: \'%s\'',
+                              key_full_path, e)
 
     def send_request(self, text):
         content = None
         try:
             if not self.key_is_valid:
-                print('Key is not set');
-                return  content
+                self.logger.error('Key is not set, ignoring request \'%s\'', text);
+                return content
             url = RiotAPI.base_url + text + self.riot_key_request
-            print('Request URL: ' + url)
+            self.logger.info('Sending request to: \'%s\'', url)
             content = urllib.request.urlopen(url).read().decode()
         except urllib.error.HTTPError as e:
-            print(e)
+            self.logger.error('Error while sending request to RiotAPI: %s', e)
         return content
 
     def get_user_id(self, nickname):
         nickname = nickname.lower()
         user_content = self.send_request(RiotAPI.summoner_url + 'by-name/' + urllib.parse.quote(nickname))
         if user_content is None:
-            print('Couldn\'t find user ' + nickname)
+            self.logger.info('Couldn\'t find user \'%s\'', nickname)
             raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
 
         user_data_json = json.loads(user_content)
         return user_data_json['id'], user_data_json['name']
 
     def get_user_elo(self, nickname):
+        self.logger.info('Getting user elo for \'%s\'', nickname)
         user_id, real_name = self.get_user_id(nickname)
         user_id_str = str(user_id)
 
@@ -92,7 +96,7 @@ class RiotAPI:
                 best_rank_id = rank_id
 
         if best_rank == 'master' or best_rank == 'challenger':
-            print('User requested master+, putting him to bronze')
+            self.logger.info('User requested master+ using nickname \'%s\', putting him to bronze', nickname)
             best_rank = 'bronze'
         return best_rank, user_id, real_name
 

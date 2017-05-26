@@ -1,7 +1,10 @@
 import random
+import logging
 
 
 class Answers:
+    logger = logging.getLogger(__name__)
+
     role_answers = {
         'Unranked': [
             ', теперь ты Unranked.',
@@ -119,6 +122,7 @@ class Answers:
 
     @staticmethod
     def generate_answer(member, role, emoji):
+        Answers.logger.debug('Generating answer for role \'%s\'', role)
         main_answer = Answers.__main_answer(role, emoji)
         comment = Answers.__comment_answer(role)
         answer = 'Окей, {0}{1}{2}'.format(member.mention, main_answer, comment)

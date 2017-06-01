@@ -155,6 +155,7 @@ class EuwBot(DiscordBot):
         Установить свой игровой ник и эло, чтобы людям было проще тебя найти в игре.
         Например '!nick xXNagibatorXx'
         """
+        mention = mobj.author.mention
         try:
             nickname = ' '.join(args).strip()
             self.logger.info('Recieved !nick command for \'%s\'', nickname)
@@ -188,7 +189,6 @@ class EuwBot(DiscordBot):
                     nick_success = False
 
             # Replying
-            mention = mobj.author.mention
             if role_success:
                 answer = Answers.generate_answer(mobj.author, new_role.name, self.emoji.s(mobj.channel.server))
                 yield from self.message(mobj.channel, answer)
@@ -204,7 +204,7 @@ class EuwBot(DiscordBot):
 
         except RiotAPI.UserIdNotFoundException as e:
             yield from self.message(mobj.channel,
-                                    '{0}, ты рак, нет ника \'{1}\' в лиге на весте. '
+                                    '{0}, ты рак, нет такого ника \'{1}\' в лиге на весте. '
                                     'Ну или риоты API сломали, попробуй попозже.'.format(mention, nickname))
         except RolesManager.RoleNotFoundException as e:
             yield from self.message(mobj.channel,

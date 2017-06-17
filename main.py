@@ -1,8 +1,7 @@
-import logging
-import logging_settings
+from logging_settings import logging
 import sys
 from euw_bot import EuwBot
-
+# from users_c import UsersC
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
@@ -12,6 +11,9 @@ if __name__ == "__main__":
 
     data_folder = sys.argv[1]
     logger.info('Selected data folder: %s', data_folder)
+
+    #users = UsersC(data_folder)
+    #if False:
 
     b = EuwBot(data_folder)
     if b.all_tokens_are_valid:

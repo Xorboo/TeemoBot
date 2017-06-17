@@ -1,5 +1,3 @@
-import sys
-import os
 import logging
 from logging.config import fileConfig
 

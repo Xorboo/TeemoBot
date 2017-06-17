@@ -1,11 +1,13 @@
 # Based on https://github.com/sleibrock/discord-bots/blob/master/bots/Bot.py
 
+import traceback
 from sys import exc_info
+import sys
 import logging
 import asyncio
 import discord
-from discord import Client, Game
-
+from discord import Client, Game, Permissions
+from pprint import pprint
 
 class DiscordBot:
     logger = logging.getLogger(__name__)
@@ -31,14 +33,14 @@ class DiscordBot:
         This is bound to static as we can't use an instance object's method
         as a decorator (could be a classmethod but who cares)
         """
-        def regfunc(function):
-            if callable(function):
-                if function.__name__ not in DiscordBot.ACTIONS:
-                    fname = '{0}{1}'.format(DiscordBot.PREFIX, function.__name__)
-                    DiscordBot.ACTIONS[fname] = function
+        def regfunc(func):
+            if callable(func):
+                if func.__name__ not in DiscordBot.ACTIONS:
+                    fname = '{0}{1}'.format(DiscordBot.PREFIX, func.__name__)
+                    DiscordBot.ACTIONS[fname] = func
                     DiscordBot.HELPMSGS[fname] = help_msg.strip()
                     return True
-            return function
+            return func
         return regfunc
 
     @staticmethod
@@ -46,12 +48,12 @@ class DiscordBot:
         """
         Decorator to register function which sould be called when message is recieved
         """
-        def regfunc(function):
-            if callable(function):
-                if function.__name__ not in DiscordBot.MESSAGE_LISTENERS:
-                    DiscordBot.MESSAGE_LISTENERS.append(function)
+        def regfunc(func):
+            if callable(func):
+                if func.__name__ not in DiscordBot.MESSAGE_LISTENERS:
+                    DiscordBot.MESSAGE_LISTENERS.append(func)
                     return True
-            return function
+            return func
         return regfunc
 
     # Instance methods below
@@ -86,14 +88,14 @@ class DiscordBot:
         msg = yield from self.client.send_message(channel, string)
         return msg
 
-    def display_no_servers(self):
+    def display_invite_link(self):
         """
-        If the bot isn't connected to any servers, show a link
-        that will let you add the bot to one of your current servers
+        Show a link that will let you add the bot to one of your current servers
         """
-        if not self.client.servers:
-            url = discord.utils.oauth_url(self.client.user.id)
-            self.logger.warning('Bot is not invited to any channel. Join link: %s', url)
+        url = discord.utils.oauth_url(self.client.user.id)
+        self.logger.warning('Bot invite link [no permissions]: %s', url)
+        url = discord.utils.oauth_url(self.client.user.id, Permissions.all())
+        self.logger.warning('Bot invite link [full permissions]: %s', url)
         return
 
     @asyncio.coroutine
@@ -106,7 +108,7 @@ class DiscordBot:
         """Change this event to change what happens on login"""
         @asyncio.coroutine
         def on_ready():
-            self.display_no_servers()
+            self.display_invite_link()
             yield from self.set_status(self.STATUS)
             self.logger.info('Connection status: {0}'.format(self.client.is_logged_in))
         return on_ready
@@ -114,9 +116,21 @@ class DiscordBot:
     def event_error(self):
         """"Change this for better error logging if needed"""
         @asyncio.coroutine
-        def on_error(evt, *args, **kwargs):
-            self.logger.error('Discord error in \'{0}\''.format(evt))
-            self.logger.error(exc_info())
+        def on_error(evt, *args, **_):
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            self.logger.error('Discord error in \'{0}\', {1}'.format(evt, traceback.format_exc()))
+
+            if len(args) > 0:
+                args_obj = args[0]
+                if hasattr(args_obj, 'channel'):
+                    error_message = 'A wild `{0}` appears... It uses `{1}`, It\'s super effective!'\
+                        .format(exc_type.__name__, exc_value)
+                    yield from self.message(args_obj.channel, error_message)
+                else:
+                    self.logger.warning('No channel found in exception, object is: %s', type(args_obj))
+            else:
+                self.logger.warning('No args provided for the exception, can\'t reply in discord channel')
+
         return on_error
 
     def event_message(self):
@@ -144,7 +158,7 @@ class DiscordBot:
         """
         self.client.get_all_members()
         self.client.event(self.event_message())
-        # self.client.event(self.event_error())
+        self.client.event(self.event_error())
         self.client.event(self.event_ready())
 
     def run(self):
@@ -157,6 +171,7 @@ class DiscordBot:
             return
 
         self.setup_events()
+        loop = None
         try:
             loop = asyncio.get_event_loop()
             loop.run_until_complete(self.client.start(self.token))

@@ -15,6 +15,7 @@ class EuwBot(DiscordBot):
     token_file_name = 'discord_token.txt'
 
     elo_command_hint = '`!nick свой_ник_на_весте`, например `!nick xXNagibatorXx`'
+    private_message_error = 'Эй, пиши в канал на сервере, чтобы я знал где тебе ник или эло выставлять.'
 
     def __init__(self, data_folder):
         token_file_path = os.path.join(data_folder, EuwBot.token_file_name)
@@ -39,11 +40,13 @@ class EuwBot(DiscordBot):
         def on_ready():
             self.logger.info('Connection status: %s', self.client.is_logged_in)
 
-            self.display_no_servers()
-            # yield from self.set_status(self.STATUS)
+            self.display_invite_link()
+            yield from self.set_status(self.STATUS)
 
             for s in self.client.servers:
                 self.logger.info('Updating data for server \'%s\'...', s)
+                prune_amount = yield from self.client.estimate_pruned_members(s, days=30)
+                self.logger.info('Inactive members for the last 30 days: %s/%s.', prune_amount, len(s.members))
                 self.emoji.update_server(s)
                 yield from self.check_no_elo_members(s)
             self.logger.info('Finished \'on_ready()\'')
@@ -155,8 +158,13 @@ class EuwBot(DiscordBot):
         Установить свой игровой ник и эло, чтобы людям было проще тебя найти в игре.
         Например '!nick xXNagibatorXx'
         """
-        mention = mobj.author.mention
         try:
+            #if mobj.channel.is_private:
+            #    self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+            #    yield from self.message(mobj.channel, self.private_message_error)
+            #    return
+
+            mention = mobj.author.mention
             nickname = ' '.join(args).strip()
             self.logger.info('Recieved !nick command for \'%s\'', nickname)
 
@@ -217,6 +225,11 @@ class EuwBot(DiscordBot):
         """
         Установить свой базовый ник (тот, что перед скобками). Если он совпадает с игровым ником, то скобок не будет.
         """
+        if mobj.channel.is_private:
+            self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+            yield from self.message(mobj.channel, self.private_message_error)
+            return
+
         base_name = NicknamesManager.clean_name(' '.join(args))
         self.logger.info('Setting base name \'%s\' for \'%s\'', base_name, mobj.author)
 
@@ -247,7 +260,7 @@ class RolesManager:
     logger = logging.getLogger(__name__)
 
     def __init__(self, server_roles):
-        self.logger.info('Parsing server roles...')
+        # self.logger.info('Parsing server roles...')
         self.rank_roles = []
         self.rank_ids = []
         for r in server_roles:
@@ -315,7 +328,7 @@ class NicknamesManager:
     def get_ingame_nickname(self, member):
         user = self.users.get_user(member)
         if user:
-            return user['nickname']
+            return user.nickname
         return None
 
     @staticmethod

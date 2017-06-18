@@ -14,7 +14,7 @@ class EuwBot(DiscordBot):
 
     token_file_name = 'discord_token.txt'
 
-    elo_command_hint = '`!nick свой_ник_на_весте`, например `!nick xXNagibatorXx`'
+    _elo_command_hint = '`!nick свой_ник_в_лиге_на_{0}`, например `!nick xXNagibatorXx`'
     private_message_error = 'Эй, пиши в канал на сервере, чтобы я знал где тебе ник или эло выставлять.'
     region_set_error = 'Введи один регион из `{0}`, например `!region euw`'.format(RiotAPI.allowed_regions)
 
@@ -24,6 +24,10 @@ class EuwBot(DiscordBot):
         self.riot_api = RiotAPI(data_folder)
         self.users = Users(data_folder)
         self.emoji = Emojis()
+
+    def get_basic_hint(self, server_id):
+        region = self.users.get_or_create_server(server_id).parameters.get_region().upper()
+        return self._elo_command_hint.format(region)
 
     @property
     def all_tokens_are_valid(self):
@@ -101,11 +105,11 @@ class EuwBot(DiscordBot):
         @asyncio.coroutine
         def on_member_join(member):
             self.logger.info('User \'%s\' joined to the server \'%s\'', member.name, member.server)
-            channel = member.server
+            server = member.server
 
             # Force user to have default gray role
             try:
-                roles_manager = RolesManager(channel.roles)
+                roles_manager = RolesManager(server.roles)
                 success, role = yield from roles_manager.set_user_initial_role(self.client, member)
                 if not success:
                     self.logger.error('Cant set initial role for user \'%s\' (forbidden)', member)
@@ -113,10 +117,11 @@ class EuwBot(DiscordBot):
                 self.logger.error('Joined user will have default role (no-elo role was not found)')
 
             fmt = 'Привет {0.mention}! {1} Чтобы установить свое эло и игровой ник, напиши {2}. ' + \
-                  'Так людям будет проще тебя найти, да и ник не будет таким серым (как твоя жизнь{3})'
-            em = self.emoji.s(channel)
-            text = fmt.format(member, em.poro, EuwBot.elo_command_hint, em.kappa)
-            yield from self.message(channel, text)
+                  'Так людям будет проще тебя найти, да и ник не будет таким серым (как твоя жизнь{3}). ' \
+                  'Так же есть `!base` для установки первой части ника, и вообще смотри в `!help`'
+            em = self.emoji.s(server)
+            text = fmt.format(member, em.poro, self.get_basic_hint(server.id), em.kappa)
+            yield from self.message(server, text)
         return on_member_join
 
     @DiscordBot.action('<Команда>')

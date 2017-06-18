@@ -28,6 +28,8 @@ class DiscordBot:
 
     @staticmethod
     def is_admin(member):
+        if type(member) is not discord.Member:
+            return False
         return member.server_permissions.administrator
 
     @staticmethod
@@ -158,6 +160,10 @@ class DiscordBot:
         @asyncio.coroutine
         def on_message(msg):
             self.logger.debug('Recieved message: %s', msg)
+
+            # Ignoring our own messages
+            if msg.author == self.client.user:
+                return
 
             # Call all message listeners
             [msg_listener(self, msg) for msg_listener in DiscordBot.MESSAGE_LISTENERS]

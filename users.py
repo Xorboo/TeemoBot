@@ -1,6 +1,7 @@
 import os
 import logging
 import jsonpickle
+from riot import RiotAPI
 
 
 class Users:
@@ -28,6 +29,13 @@ class Users:
         except IOError as e:
             self.logger.warning('Couldn\'t open users file, nothing loaded, error: \'%s\'', e)
 
+    def save_users(self):
+        self.logger.info('Saving users data to file \'%s\'', self.full_path)
+        f = open(self.full_path, 'w')
+        file_contents = jsonpickle.encode(self.data)
+        f.write(file_contents)
+        f.close()
+
     def get_user(self, member):
         server = self.data.get_server(member.server.id)
         if server:
@@ -51,12 +59,20 @@ class Users:
 
         self.save_users()
 
-    def save_users(self):
-        self.logger.info('Saving users data to file \'%s\'', self.full_path)
-        f = open(self.full_path, 'w')
-        file_contents = jsonpickle.encode(self.data)
-        f.write(file_contents)
-        f.close()
+    def get_or_create_server(self, server_id):
+        return self.data.get_or_create_server(server_id)
+
+    def set_server_region(self, server_id, region):
+        self.logger.info('Setting region \'%s\' for server \'%s\'', region, server_id)
+
+        server = self.get_or_create_server(server_id)
+        if server.parameters.set_region(region):
+            self.save_users()
+            self.logger.info('Region success')
+            return True
+        else:
+            self.logger.info('Region failure')
+            return False
 
 
 class ServersData(object):
@@ -134,6 +150,20 @@ class UserData(object):
 
 
 class ServerParameters(object):
-    def __init__(self, language='eng', is_salty=True):
+    def __init__(self, language='eng', is_salty=True, region='euw'):
         self.language = language
         self.is_salty = is_salty
+        self.region = region
+
+    def get_region(self):
+        if not hasattr(self, 'region'):
+            self.region = 'euw'
+        return self.region
+
+    def set_region(self, region):
+        region = region.lower().strip()
+        if RiotAPI.has_region(region):
+            self.region = region
+            return True
+        else:
+            return False

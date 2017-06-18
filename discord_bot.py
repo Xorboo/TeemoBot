@@ -1,13 +1,12 @@
 # Based on https://github.com/sleibrock/discord-bots/blob/master/bots/Bot.py
 
 import traceback
-from sys import exc_info
 import sys
 import logging
 import asyncio
 import discord
 from discord import Client, Game, Permissions
-from pprint import pprint
+
 
 class DiscordBot:
     logger = logging.getLogger(__name__)
@@ -15,6 +14,7 @@ class DiscordBot:
     PREFIX = '!'
     MESSAGE_LISTENERS = list()
     ACTIONS = dict()
+    ADMIN_ACTIONS = dict()
     HELPMSGS = dict()
     STATUS = 'with ururus'
 
@@ -25,6 +25,10 @@ class DiscordBot:
         if lang is not None:
             s = s.format(format+"\n{}")
         return s.format(msg.rstrip().strip("\n").replace("\t", ""))
+
+    @staticmethod
+    def is_admin(member):
+        return member.server_permissions.administrator
 
     @staticmethod
     def action(help_msg=''):
@@ -38,6 +42,23 @@ class DiscordBot:
                 if func.__name__ not in DiscordBot.ACTIONS:
                     fname = '{0}{1}'.format(DiscordBot.PREFIX, func.__name__)
                     DiscordBot.ACTIONS[fname] = func
+                    DiscordBot.HELPMSGS[fname] = help_msg.strip()
+                    return True
+            return func
+        return regfunc
+
+    @staticmethod
+    def admin_action(help_msg=''):
+        """
+        Decorator to register functions into the action map
+        This is bound to static as we can't use an instance object's method
+        as a decorator (could be a classmethod but who cares)
+        """
+        def regfunc(func):
+            if callable(func):
+                if func.__name__ not in DiscordBot.ADMIN_ACTIONS:
+                    fname = '{0}{1}'.format(DiscordBot.PREFIX, func.__name__)
+                    DiscordBot.ADMIN_ACTIONS[fname] = func
                     DiscordBot.HELPMSGS[fname] = help_msg.strip()
                     return True
             return func
@@ -58,7 +79,6 @@ class DiscordBot:
 
     # Instance methods below
     def __init__(self, token_file_path):
-        self.actions = dict()
         self.client = Client()
         self.token = DiscordBot.load_token(token_file_path)
 
@@ -145,6 +165,14 @@ class DiscordBot:
             # Parse the message for special commands
             args = msg.content.strip().split(' ')
             key = args.pop(0).lower()  # messages sent can't be empty
+
+            # Admin actions
+            if self.is_admin(msg.author):
+                if key in self.ADMIN_ACTIONS:
+                    result = yield from self.ADMIN_ACTIONS[key](self, args, msg)
+                    return result
+
+            # Standart actions
             if key in self.ACTIONS:
                 result = yield from self.ACTIONS[key](self, args, msg)
                 return result

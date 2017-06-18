@@ -23,13 +23,55 @@ class RiotAPI:
     }
 
     key_file_name = 'riot_api_key.txt'
-    base_url = 'https://euw1.api.riotgames.com/'
-    summoner_url = 'lol/summoner/v3/summoners/'
-    league_url = 'api/lol/euw/v2.5/league/'
+
+    _base_url = 'https://{0}.api.riotgames.com/'
+    _summoner_url = 'lol/summoner/v3/summoners/'
+    _league_url = 'api/lol/{0}/v2.5/league/'
+
+    allowed_regions = 'euw | eune | na | ru | kr | br | oce | jp | tr | lan | las'
+    _regions = {
+        'euw': {'base': 'euw1', 'league': 'euw'},
+        'eune': {'base': 'eun1', 'league': 'eune'},
+        'na': {'base': 'na1', 'league': 'na'},
+        'ru': {'base': 'ru', 'league': 'ru'},
+        'kr': {'base': 'kr', 'league': 'kr'},
+        'br': {'base': 'br1', 'league': 'br'},
+        'oce': {'base': 'oc1', 'league': 'oce'},
+        'jp': {'base': 'jp1', 'league': 'jp'},
+        'tr': {'base': 'tr1', 'league': 'tr'},
+        'lan': {'base': 'la1', 'league': 'lan'},
+        'las': {'base': 'la2', 'league': 'las'}
+    }
 
     def __init__(self, data_folder):
         self.riot_api_key = ''
         self.load_key(data_folder)
+
+    @staticmethod
+    def has_region(region):
+        return region in RiotAPI._regions
+
+    @staticmethod
+    def base_url(region):
+        if RiotAPI.has_region(region):
+            base_region = RiotAPI._regions[region]['base']
+            return RiotAPI._base_url.format(base_region)
+        else:
+            RiotAPI.logger.error('Requested unknown region for base_url: \'%s\'', region)
+            return ''
+
+    @staticmethod
+    def summoner_url(_):
+        return RiotAPI._summoner_url
+
+    @staticmethod
+    def league_url(region):
+        if RiotAPI.has_region(region):
+            league_region = RiotAPI._regions[region]['league']
+            return RiotAPI._league_url.format(league_region)
+        else:
+            RiotAPI.logger.error('Requested unknown region for league_url: \'%s\'', region)
+            return ''
 
     @property
     def riot_key_request(self):
@@ -51,22 +93,23 @@ class RiotAPI:
             self.logger.error('Couldn\'t open riot api key file, create file with the api key in \'%s\'. Error: \'%s\'',
                               key_full_path, e)
 
-    def send_request(self, text):
+    def send_request(self, request_url, region):
         content = None
         try:
             if not self.key_is_valid:
-                self.logger.error('Key is not set, ignoring request \'%s\'', text);
+                self.logger.error('Key is not set, ignoring request \'%s\'', request_url);
                 return content
-            url = RiotAPI.base_url + text + self.riot_key_request
+            url = RiotAPI.base_url(region) + request_url + self.riot_key_request
             self.logger.info('Sending request to: \'%s\'', url)
             content = urllib.request.urlopen(url).read().decode()
         except urllib.error.HTTPError as e:
             self.logger.error('Error while sending request to RiotAPI: %s', e)
         return content
 
-    def get_user_id(self, nickname):
+    def get_user_id(self, nickname, region):
         nickname = nickname.lower()
-        user_content = self.send_request(RiotAPI.summoner_url + 'by-name/' + urllib.parse.quote(nickname))
+        user_id_url = RiotAPI.summoner_url(region) + 'by-name/' + urllib.parse.quote(nickname)
+        user_content = self.send_request(user_id_url, region)
         if user_content is None:
             self.logger.info('Couldn\'t find user \'%s\'', nickname)
             raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
@@ -74,12 +117,12 @@ class RiotAPI:
         user_data_json = json.loads(user_content)
         return user_data_json['id'], user_data_json['name']
 
-    def get_user_elo(self, nickname):
+    def get_user_elo(self, nickname, region):
         self.logger.info('Getting user elo for \'%s\'', nickname)
-        user_id, real_name = self.get_user_id(nickname)
+        user_id, real_name = self.get_user_id(nickname, region)
         user_id_str = str(user_id)
 
-        ranks_content = self.send_request(RiotAPI.league_url + 'by-summoner/' + user_id_str)
+        ranks_content = self.send_request(RiotAPI.league_url(region) + 'by-summoner/' + user_id_str, region)
         if ranks_content is None:
             return 'unranked', user_id, real_name
 

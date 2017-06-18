@@ -16,6 +16,7 @@ class EuwBot(DiscordBot):
 
     elo_command_hint = '`!nick свой_ник_на_весте`, например `!nick xXNagibatorXx`'
     private_message_error = 'Эй, пиши в канал на сервере, чтобы я знал где тебе ник или эло выставлять.'
+    region_set_error = 'Введи один регион из `{0}`, например `!region euw`'.format(RiotAPI.allowed_regions)
 
     def __init__(self, data_folder):
         token_file_path = os.path.join(data_folder, EuwBot.token_file_name)
@@ -151,7 +152,7 @@ class EuwBot(DiscordBot):
     def on_message(self, mobj):
         pass
 
-    @DiscordBot.action('<Ник_в_игре (только на EUW)>')
+    @DiscordBot.action('<Ник_в_игре>')
     @asyncio.coroutine
     def nick(self, args, mobj):
         """
@@ -159,10 +160,10 @@ class EuwBot(DiscordBot):
         Например '!nick xXNagibatorXx'
         """
         try:
-            #if mobj.channel.is_private:
-            #    self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
-            #    yield from self.message(mobj.channel, self.private_message_error)
-            #    return
+            if mobj.channel.is_private:
+                self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+                yield from self.message(mobj.channel, self.private_message_error)
+                return
 
             mention = mobj.author.mention
             nickname = ' '.join(args).strip()
@@ -175,7 +176,9 @@ class EuwBot(DiscordBot):
             yield from self.client.send_typing(mobj.channel)
 
             # Getting user elo using RiotAPI
-            rank, game_user_id, nickname = self.riot_api.get_user_elo(nickname)
+            server = self.users.get_or_create_server(mobj.server.id)
+            region = server.parameters.get_region()
+            rank, game_user_id, nickname = self.riot_api.get_user_elo(nickname, region)
 
             # Saving user to database
             self.users.add_user(mobj.author, game_user_id, nickname, rank)
@@ -210,11 +213,11 @@ class EuwBot(DiscordBot):
                     mobj.channel,
                     '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
 
-        except RiotAPI.UserIdNotFoundException as e:
+        except RiotAPI.UserIdNotFoundException as _:
             yield from self.message(mobj.channel,
-                                    '{0}, ты рак, нет такого ника \'{1}\' в лиге на весте. '
-                                    'Ну или риоты API сломали, попробуй попозже.'.format(mention, nickname))
-        except RolesManager.RoleNotFoundException as e:
+                                    '{0}, ты рак, нет такого ника \'{1}\' в лиге на `{2}`. '
+                                    'Ну или риоты API сломали, попробуй попозже.'.format(mention, nickname, region))
+        except RolesManager.RoleNotFoundException as _:
             yield from self.message(mobj.channel,
                                     'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
                                     'Скажи админу чтобы добавил роль \'{1}\''.format(mention, rank))
@@ -254,6 +257,43 @@ class EuwBot(DiscordBot):
         else:
             yield from self.message(mobj.channel,
                                     '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
+
+    @DiscordBot.action()
+    @asyncio.coroutine
+    def region(self, _, mobj):
+        """
+        Установить/Получить регион, по которому будет выставляться эло.
+        """
+        if mobj.channel.is_private:
+            self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+            yield from self.message(mobj.channel, self.private_message_error)
+            return
+
+        current_region = self.users.get_or_create_server(mobj.server.id).parameters.get_region()
+        yield from self.message(mobj.channel, 'Текущий регион: `{0}`'.format(current_region))
+
+    @DiscordBot.admin_action('<Регион ({0})>'.format(RiotAPI.allowed_regions))
+    @asyncio.coroutine
+    def set_region(self, args, mobj):
+        """
+        Установить/Получить регион, по которому будет выставляться эло.
+        """
+        if mobj.channel.is_private:
+            self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+            yield from self.message(mobj.channel, self.private_message_error)
+            return
+
+        if len(args) == 1:
+            region = args[0].strip().lower()
+            self.logger.info('Recieved !region command for \'%s\' on %s', region, mobj.server.name)
+
+            if self.users.set_server_region(mobj.server.id, region):
+                yield from self.message(mobj.channel, 'Установил регион `{0}` на сервере.'.format(region))
+            else:
+                yield from self.message(mobj.channel, self.region_set_error + ', `{0}` не подходит'.format(region))
+        else:
+            yield from self.message(mobj.channel, self.region_set_error)
+            return
 
 
 class RolesManager:

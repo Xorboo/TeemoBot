@@ -115,7 +115,7 @@ class RiotAPI:
             raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
 
         user_data_json = json.loads(user_content)
-        return user_data_json['id'], user_data_json['name']
+        return user_data_json['id'], user_data_json['name'].strip()
 
     def get_user_elo(self, nickname, region):
         self.logger.info('Getting user elo for \'%s\'', nickname)

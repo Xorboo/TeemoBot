@@ -166,13 +166,14 @@ class EuwBot(DiscordBot):
         """
         try:
             if mobj.channel.is_private:
-                self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+                self.logger.info('User \'{0}\' sent private message \'{1}\''
+                                 .format(mobj.author.name, mobj.content).encode('utf-8'))
                 yield from self.message(mobj.channel, self.private_message_error)
                 return
 
             mention = mobj.author.mention
             nickname = ' '.join(args).strip()
-            self.logger.info('Recieved !nick command for \'%s\'', nickname)
+            self.logger.info('Recieved !nick command for \'{0}\''.format(nickname).encode('utf-8'))
 
             if not nickname:
                 yield from self.message(mobj.channel, 'Ник то напиши после `!nick`, ну...')
@@ -197,7 +198,8 @@ class EuwBot(DiscordBot):
             new_name = nick_manager.get_combined_nickname(mobj.author)
             if new_name:
                 try:
-                    self.logger.info('Setting nickname: \'%s\' for \'%s\'', new_name, mobj.author)
+                    self.logger.info('Setting nickname: \'{0}\' for \'{1}\''
+                                     .format(new_name, mobj.author).encode('utf-8'))
                     yield from self.client.change_nickname(mobj.author, new_name)
                     nick_success = True
                 except discord.errors.Forbidden as e:
@@ -234,12 +236,13 @@ class EuwBot(DiscordBot):
         Установить свой базовый ник (тот, что перед скобками). Если он совпадает с игровым ником, то скобок не будет.
         """
         if mobj.channel.is_private:
-            self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+            self.logger.info('User \'{0}\' sent private message \'{1}\''
+                             .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
         base_name = NicknamesManager.clean_name(' '.join(args))
-        self.logger.info('Setting base name \'%s\' for \'%s\'', base_name, mobj.author)
+        self.logger.info('Setting base name \'{0}\' for \'{1}\''.format(base_name, mobj.author).encode('utf-8'))
 
         nick_manager = NicknamesManager(self.users)
         game_name = nick_manager.get_ingame_nickname(mobj.author)
@@ -249,7 +252,7 @@ class EuwBot(DiscordBot):
             new_name = base_name
 
         try:
-            self.logger.info('Setting nickname: \'%s\'', new_name)
+            self.logger.info('Setting nickname: \'{0}\''.format(new_name).encode('utf-8'))
             yield from self.client.change_nickname(mobj.author, new_name)
             nick_success = True
         except discord.errors.Forbidden as e:
@@ -270,7 +273,8 @@ class EuwBot(DiscordBot):
         Установить/Получить регион, по которому будет выставляться эло.
         """
         if mobj.channel.is_private:
-            self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+            self.logger.info('User \'{0}\' sent private message \'{1}\''
+                             .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
@@ -284,7 +288,8 @@ class EuwBot(DiscordBot):
         Установить/Получить регион, по которому будет выставляться эло.
         """
         if mobj.channel.is_private:
-            self.logger.info('User \'%s\' sent private message \'%s\'', mobj.author.name, mobj.content)
+            self.logger.info('User \'{0}\' sent private message \'{1}\''
+                             .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
             return
 

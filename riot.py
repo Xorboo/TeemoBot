@@ -111,14 +111,14 @@ class RiotAPI:
         user_id_url = RiotAPI.summoner_url(region) + 'by-name/' + urllib.parse.quote(nickname)
         user_content = self.send_request(user_id_url, region)
         if user_content is None:
-            self.logger.info('Couldn\'t find user \'%s\'', nickname)
+            self.logger.info('Couldn\'t find user \'{0}\''.format(nickname).encode('utf-8'))
             raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
 
         user_data_json = json.loads(user_content)
         return user_data_json['id'], user_data_json['name'].strip()
 
     def get_user_elo(self, nickname, region):
-        self.logger.info('Getting user elo for \'%s\'', nickname)
+        self.logger.info('Getting user elo for \'{0}\''.format(nickname).encode('utf-8'))
         user_id, real_name = self.get_user_id(nickname, region)
         user_id_str = str(user_id)
 
@@ -139,7 +139,8 @@ class RiotAPI:
                 best_rank_id = rank_id
 
         if best_rank == 'master' or best_rank == 'challenger':
-            self.logger.info('User requested master+ using nickname \'%s\', putting him to bronze', nickname)
+            self.logger.info('User requested master+ using nickname \'{0}\', putting him to bronze'
+                             .format(nickname).encode('utf-8'))
             best_rank = 'bronze'
         return best_rank, user_id, real_name
 

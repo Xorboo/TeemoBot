@@ -157,50 +157,38 @@ class EuwBot(DiscordBot):
     def on_message(self, mobj):
         pass
 
-    @DiscordBot.action('<Ник_в_игре>')
     @asyncio.coroutine
-    def nick(self, args, mobj):
-        """
-        Установить свой игровой ник и эло, чтобы людям было проще тебя найти в игре.
-        Например '!nick xXNagibatorXx'
-        """
+    def change_lol_nickname(self, member, nickname, channel):
         try:
-            if mobj.channel.is_private:
-                self.logger.info('User \'{0}\' sent private message \'{1}\''
-                                 .format(mobj.author.name, mobj.content).encode('utf-8'))
-                yield from self.message(mobj.channel, self.private_message_error)
-                return
-
-            mention = mobj.author.mention
-            nickname = ' '.join(args).strip()
-            self.logger.info('Recieved !nick command for \'{0}\''.format(nickname).encode('utf-8'))
+            mention = member.mention
+            self.logger.info('Recieved !nick command for \'{0}\' on \'{1}\''.format(nickname, channel.server).encode('utf-8'))
 
             if not nickname:
-                yield from self.message(mobj.channel, 'Ник то напиши после `!nick`, ну...')
+                yield from self.message(channel, 'Ник то напиши после `!nick`, ну...')
                 return
 
-            yield from self.client.send_typing(mobj.channel)
+            yield from self.client.send_typing(channel)
 
             # Getting user elo using RiotAPI
-            server = self.users.get_or_create_server(mobj.server.id)
+            server = self.users.get_or_create_server(channel.server.id)
             region = server.parameters.get_region()
             rank, game_user_id, nickname = self.riot_api.get_user_elo(nickname, region)
 
             # Saving user to database
-            self.users.add_user(mobj.author, game_user_id, nickname, rank)
+            self.users.add_user(member, game_user_id, nickname, rank)
 
             # Updating users role on server
-            roles_manager = RolesManager(mobj.channel.server.roles)
-            role_success, new_role = yield from roles_manager.set_user_role(self.client, mobj.author, rank)
+            roles_manager = RolesManager(channel.server.roles)
+            role_success, new_role = yield from roles_manager.set_user_role(self.client, member, rank)
 
             # Updating user nickname
             nick_manager = NicknamesManager(self.users)
-            new_name = nick_manager.get_combined_nickname(mobj.author)
+            new_name = nick_manager.get_combined_nickname(member)
             if new_name:
                 try:
                     self.logger.info('Setting nickname: \'{0}\' for \'{1}\''
-                                     .format(new_name, mobj.author).encode('utf-8'))
-                    yield from self.client.change_nickname(mobj.author, new_name)
+                                     .format(new_name, member).encode('utf-8'))
+                    yield from self.client.change_nickname(member, new_name)
                     nick_success = True
                 except discord.errors.Forbidden as e:
                     self.logger.error('Error setting nickname: %s', e)
@@ -208,26 +196,73 @@ class EuwBot(DiscordBot):
 
             # Replying
             if role_success:
-                answer = Answers.generate_answer(mobj.author, new_role.name, self.emoji.s(mobj.channel.server))
-                yield from self.message(mobj.channel, answer)
+                answer = Answers.generate_answer(member, new_role.name, self.emoji.s(channel.server))
+                yield from self.message(channel, answer)
             else:
-                yield from self.message(mobj.channel,
+                yield from self.message(channel,
                                         'Эй, {0}, у меня недостаточно прав чтобы выставить твою роль, '
                                         'скажи админу чтобы перетащил мою роль выше остальных.'.format(mention))
 
             if not nick_success:
                 yield from self.message(
-                    mobj.channel,
-                    '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
+                    channel, '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
 
         except RiotAPI.UserIdNotFoundException as _:
-            yield from self.message(mobj.channel,
+            yield from self.message(channel,
                                     '{0}, ты рак, нет такого ника \'{1}\' в лиге на `{2}`. '
                                     'Ну или риоты API сломали, попробуй попозже.'.format(mention, nickname, region))
         except RolesManager.RoleNotFoundException as _:
-            yield from self.message(mobj.channel,
+            yield from self.message(channel,
                                     'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
                                     'Скажи админу чтобы добавил роль \'{1}\''.format(mention, rank))
+
+    @DiscordBot.action('<Ник_в_игре>')
+    @asyncio.coroutine
+    def nick(self, args, mobj):
+        """
+        Установить свой игровой ник и эло, чтобы людям было проще тебя найти в игре.
+        Например '!nick xXNagibatorXx'
+        """
+        if mobj.channel.is_private:
+            self.logger.info('User \'{0}\' sent private message \'{1}\''
+                             .format(mobj.author.name, mobj.content).encode('utf-8'))
+            yield from self.message(mobj.channel, self.private_message_error)
+            return
+
+        nickname = ' '.join(args).strip()
+        yield from self.change_lol_nickname(mobj.author, nickname, mobj.channel)
+
+    @DiscordBot.action('<@упоминание> <Ник_в_игре>')
+    @asyncio.coroutine
+    def force(self, args, mobj):
+        """
+        Установить игровой ник определенному игроку.
+        Например '!nick @ya_ne_bronze xXNagibatorXx'
+        """
+        if mobj.channel.is_private:
+            self.logger.info('User \'{0}\' sent private message \'{1}\''
+                             .format(mobj.author.name, mobj.content).encode('utf-8'))
+            yield from self.message(mobj.channel, self.private_message_error)
+            return
+
+        if len(args) < 2:
+            yield from self.message(mobj.channel, 'Укажи @юзера и его ник, смотри !help.')
+            return
+
+        if not mobj.mentions:
+            yield from self.message(mobj.channel, 'Укажи @юзера, которому поставить ник.')
+            return
+
+        user = mobj.mentions[0]
+        mention_text = args[0]
+        if mention_text != user.mention:
+            yield from self.message(mobj.channel, '@юзер должен идти первым, смотри !help.')
+            return
+
+        nickname = ' '.join(args[1:]).strip()
+        self.logger.info('Force setting nickname \'{0}\' to user \'{1}\', admin: \'{2}\''
+                         .format(nickname, user, mobj.author).encode('utf-8'))
+        yield from self.change_lol_nickname(user, nickname, mobj.channel)
 
     @DiscordBot.action('<Базовый_Ник>')
     @asyncio.coroutine

@@ -232,7 +232,7 @@ class EuwBot(DiscordBot):
         nickname = ' '.join(args).strip()
         yield from self.change_lol_nickname(mobj.author, nickname, mobj.channel)
 
-    @DiscordBot.action('<@упоминание> <Ник_в_игре>')
+    @DiscordBot.admin_action('<@упоминание> <Ник_в_игре>')
     @asyncio.coroutine
     def force(self, args, mobj):
         """

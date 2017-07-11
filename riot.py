@@ -43,9 +43,9 @@ class RiotAPI:
         'las': {'base': 'la2', 'league': 'las'}
     }
 
-    def __init__(self, data_folder):
-        self.riot_api_key = ''
-        self.load_key(data_folder)
+    def __init__(self, riot_key):
+        self.api_key = riot_key
+        # self.load_key(data_folder)
 
     @staticmethod
     def has_region(region):
@@ -74,21 +74,30 @@ class RiotAPI:
             return ''
 
     @property
+    def api_key(self):
+        return self._api_key
+
+    @api_key.setter
+    def api_key(self, value):
+        self._api_key = value
+        self.logger.info('Riot API key loaded: \'%s\'', value)
+
+    @property
     def riot_key_request(self):
-        return '?api_key=' + self.riot_api_key
+        return '?api_key=' + self._api_key
 
     @property
     def key_is_valid(self):
-        return bool(self.riot_api_key)
+        return bool(self._api_key)
 
     def load_key(self, data_folder):
         key_full_path = os.path.join(data_folder, RiotAPI.key_file_name)
         self.logger.info('Loading RiotAPI key from \'%s\'', key_full_path)
         try:
             f = open(key_full_path, 'r')
-            self.riot_api_key = f.read()
+            self._api_key = f.read()
             f.close()
-            self.logger.info('Riot API key loaded: \'%s\'', self.riot_api_key)
+            self.logger.info('Riot API key loaded: \'%s\'', self._api_key)
         except IOError as e:
             self.logger.error('Couldn\'t open riot api key file, create file with the api key in \'%s\'. Error: \'%s\'',
                               key_full_path, e)

@@ -2,6 +2,7 @@ import asyncio
 import os
 import logging
 import discord
+import json
 from discord_bot import DiscordBot
 from riot import RiotAPI
 from users import Users
@@ -12,22 +13,31 @@ from emojis import Emojis
 class EuwBot(DiscordBot):
     logger = logging.getLogger(__name__)
 
-    token_file_name = 'discord_token.txt'
+    parameters_file_name = 'parameters.json'
 
     _elo_command_hint = '`!nick свой_ник_в_лиге_на_{0}`, например `!nick xXNagibatorXx`'
     private_message_error = 'Эй, пиши в канал на сервере, чтобы я знал где тебе ник или эло выставлять.'
     region_set_error = 'Введи один регион из `{0}`, например `!region euw`'.format(RiotAPI.allowed_regions)
 
     def __init__(self, data_folder):
-        token_file_path = os.path.join(data_folder, EuwBot.token_file_name)
-        super(EuwBot, self).__init__(token_file_path)
-        self.riot_api = RiotAPI(data_folder)
+        self.parameters_file_path = os.path.join(data_folder, EuwBot.parameters_file_name)
+        with open(self.parameters_file_path) as parameters_file:
+            self.parameters_data = json.load(parameters_file)
+        self.logger.info('Loaded parameters file from \'%s\'', self.save_parameters())
+
+        super(EuwBot, self).__init__(self.parameters_data["discord"])
+        self.riot_api = RiotAPI(self.parameters_data["riot_api_key"])
         self.users = Users(data_folder)
         self.emoji = Emojis()
 
     def get_basic_hint(self, server_id):
         region = self.users.get_or_create_server(server_id).parameters.get_region().upper()
         return self._elo_command_hint.format(region)
+
+    def save_parameters(self):
+        with open(self.parameters_file_path, 'w') as parameters_file:
+            json.dump(self.parameters_data, parameters_file)
+        self.logger.info('Saved parameters file to \'%s\'', self.parameters_file_path)
 
     @property
     def all_tokens_are_valid(self):
@@ -123,6 +133,21 @@ class EuwBot(DiscordBot):
             text = fmt.format(member, em.poro, self.get_basic_hint(server.id), em.kappa)
             yield from self.message(server, text)
         return on_member_join
+
+    @DiscordBot.owner_action('<new RiotAPI key>')
+    @asyncio.coroutine
+    def riot_key(self, args, mobj):
+        """
+        Установить новый RiotAPI ключ.
+        Получить его можно по ссылке: https://developer.riotgames.com/
+        """
+        new_key = args[0]
+        self.logger.info('Updating RiotAPI key to \'%s\' by user: %s', new_key, mobj.author)
+        self.parameters_data["riot_api_key"] = new_key
+        self.riot_api.api_key = new_key
+        self.save_parameters()
+        yield from self.message(mobj.channel, 'Окей {0}, обновил ключ RiotAPI'.format(mobj.author.mention))
+        yield from self.client.delete_message(mobj)
 
     @DiscordBot.action('<Команда>')
     @asyncio.coroutine

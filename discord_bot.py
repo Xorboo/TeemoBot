@@ -15,6 +15,7 @@ class DiscordBot:
     MESSAGE_LISTENERS = list()
     ACTIONS = dict()
     ADMIN_ACTIONS = dict()
+    OWNER_ACTIONS = dict()
     HELPMSGS = dict()
     STATUS = 'with ururus'
 
@@ -28,9 +29,14 @@ class DiscordBot:
 
     @staticmethod
     def is_admin(member):
-        if type(member) is not discord.Member:
+        if not isinstance(member, discord.Member):
             return False
         return member.server_permissions.administrator
+
+    def is_owner(self, member):
+        if not isinstance(member, discord.User):
+            return False
+        return member.id == self.owner_id
 
     @staticmethod
     def action(help_msg=''):
@@ -67,6 +73,23 @@ class DiscordBot:
         return regfunc
 
     @staticmethod
+    def owner_action(help_msg=''):
+        """
+        Decorator to register functions into the action map
+        This is bound to static as we can't use an instance object's method
+        as a decorator (could be a classmethod but who cares)
+        """
+        def regfunc(func):
+            if callable(func):
+                if func.__name__ not in DiscordBot.OWNER_ACTIONS:
+                    fname = '{0}{1}'.format(DiscordBot.PREFIX, func.__name__)
+                    DiscordBot.OWNER_ACTIONS[fname] = func
+                    DiscordBot.HELPMSGS[fname] = help_msg.strip()
+                    return True
+            return func
+        return regfunc
+
+    @staticmethod
     def message_listener():
         """
         Decorator to register function which sould be called when message is recieved
@@ -80,9 +103,11 @@ class DiscordBot:
         return regfunc
 
     # Instance methods below
-    def __init__(self, token_file_path):
+    def __init__(self, parameters_json):
         self.client = Client()
-        self.token = DiscordBot.load_token(token_file_path)
+        # self.token = DiscordBot.load_token(token_file_path)
+        self.token = parameters_json["token"]
+        self.owner_id = parameters_json["owner_id"]
 
     @property
     def token_is_valid(self):
@@ -171,6 +196,12 @@ class DiscordBot:
             # Parse the message for special commands
             args = msg.content.strip().split(' ')
             key = args.pop(0).lower()  # messages sent can't be empty
+
+            # Owner actions
+            if self.is_owner(msg.author):
+                if key in self.OWNER_ACTIONS:
+                    result = yield from self.OWNER_ACTIONS[key](self, args, msg)
+                    return result
 
             # Admin actions
             if self.is_admin(msg.author):

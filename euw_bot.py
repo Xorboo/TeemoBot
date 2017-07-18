@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 import logging
 import discord
 import json
@@ -19,6 +20,9 @@ class EuwBot(DiscordBot):
     private_message_error = 'Эй, пиши в канал на сервере, чтобы я знал где тебе ник или эло выставлять.'
     region_set_error = 'Введи один регион из `{0}`, например `!region euw`'.format(RiotAPI.allowed_regions)
 
+    api_check_period = 60
+    api_check_data = {'name': 'Xorboo', 'region': 'euw'}
+
     def __init__(self, data_folder):
         self.parameters_file_path = os.path.join(data_folder, EuwBot.parameters_file_name)
         with open(self.parameters_file_path) as parameters_file:
@@ -29,6 +33,9 @@ class EuwBot(DiscordBot):
         self.riot_api = RiotAPI(self.parameters_data["riot_api_key"])
         self.users = Users(data_folder)
         self.emoji = Emojis()
+
+        self.last_api_check_time = 0
+        self.api_is_working = True
 
     def get_basic_hint(self, server_id):
         region = self.users.get_or_create_server(server_id).parameters.get_region().upper()
@@ -233,9 +240,24 @@ class EuwBot(DiscordBot):
                     channel, '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
 
         except RiotAPI.UserIdNotFoundException as _:
-            yield from self.message(channel,
-                                    '{0}, ты рак, нет такого ника \'{1}\' в лиге на `{2}`. '
-                                    'Ну или риоты API сломали, попробуй попозже.'.format(mention, nickname, region))
+            api_working = self.check_api_if_needed()
+            if api_working:
+                yield from self.message(channel,
+                                        '{0}, ты рак, нет такого ника \'{1}\' в лиге на `{2}`. '
+                                        'Ну или риоты API сломали, попробуй попозже.'.format(mention, nickname, region))
+            else:
+                api_url = 'https://developer.riotgames.com/api-status/'
+                yield from self.message(channel,
+                                        '{0}, Ближайшие пару недель я буду периодически не работать. '
+                                        'Проверь здесь ({1}), если там все в порядке, то напиши о проблеме {2}. '
+                                        'Но вообще я и сам ему напишу...'.format(mention, api_url, self.owner.mention))
+                yield from self.message(self.owner, 'Тут на \'{0}\' юзер \'{1}\' пытается установить себе ник \'{2}\', '
+                                                    'а АПИ лежит...'.format(member, nickname, channel))
+                # yield from self.message(channel,
+                #                        '{0}, судя по всему рито сломали их API. '
+                #                        'Проверь здесь, что все хорошо, либо подожди немного: '
+                #                        'https://developer.riotgames.com/api-status/'.format(mention))
+
         except RolesManager.RoleNotFoundException as _:
             yield from self.message(channel,
                                     'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
@@ -365,6 +387,30 @@ class EuwBot(DiscordBot):
             yield from self.message(mobj.channel, self.region_set_error)
             return
 
+    @DiscordBot.admin_action('URURU')
+    @asyncio.coroutine
+    def ururu(self, args, mobj):
+        """
+        Сказать овнера
+        """
+        yield from self.message(mobj.channel, self.owner.mention)
+
+    def check_api_if_needed(self):
+        current_time = time.time()
+        if current_time - self.last_api_check_time < self.api_check_period:
+            return self.api_is_working
+
+        self.logger.info('Checking Riot API status...')
+        self.last_api_check_time = current_time
+        self.api_is_working = False
+        try:
+            self.riot_api.get_user_id(self.api_check_data['name'], self.api_check_data['region'])
+            self.api_is_working = True
+            self.logger('Riot API is working properly.')
+        except RiotAPI.UserIdNotFoundException as _:
+            self.logger.error('Checking RiotAPI failed - api is not working')
+        return self.api_is_working
+
 
 class RolesManager:
     logger = logging.getLogger(__name__)
@@ -465,7 +511,7 @@ class NicknamesManager:
         if len(nick) > max_len:
             nick = nick[:max_len - len(over_text)] + over_text
 
-        if base.lower() != nick.lower():
+        if len(base) > 0 and base.lower() != nick.lower():
             # Combine names if they are not equal
             total_len = len(base) + len(nick) + len(' ()')
             if total_len > max_len:

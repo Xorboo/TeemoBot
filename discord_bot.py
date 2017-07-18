@@ -108,6 +108,7 @@ class DiscordBot:
         # self.token = DiscordBot.load_token(token_file_path)
         self.token = parameters_json["token"]
         self.owner_id = parameters_json["owner_id"]
+        self.owner = discord.User(username='Xorboo', id=self.owner_id, discriminator='1337', avatar='')
 
     @property
     def token_is_valid(self):

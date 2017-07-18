@@ -131,21 +131,19 @@ class RiotAPI:
         user_id, real_name = self.get_user_id(nickname, region)
         user_id_str = str(user_id)
 
-        ranks_content = self.send_request(RiotAPI.league_url(region) + 'by-summoner/' + user_id_str, region)
-        if ranks_content is None:
-            return 'unranked', user_id, real_name
-
-        ranks_data = json.loads(ranks_content)
-
-        game_modes = ranks_data[user_id_str]
         best_rank = 'unranked'
-        best_rank_id = RiotAPI.ranks[best_rank]
-        for mode in game_modes:
-            rank = mode['tier'].lower()
-            rank_id = RiotAPI.ranks[rank]
-            if rank_id > best_rank_id:
-                best_rank = rank
-                best_rank_id = rank_id
+        ranks_content = self.send_request(RiotAPI.league_url(region) + 'by-summoner/' + user_id_str, region)
+        if ranks_content:
+            best_rank_id = RiotAPI.ranks[best_rank]
+
+            ranks_data = json.loads(ranks_content)
+            game_modes = ranks_data[user_id_str]
+            for mode in game_modes:
+                rank = mode['tier'].lower()
+                rank_id = RiotAPI.ranks[rank]
+                if rank_id > best_rank_id:
+                    best_rank = rank
+                    best_rank_id = rank_id
 
         if best_rank == 'master' or best_rank == 'challenger':
             self.logger.info('User requested master+ using nickname \'{0}\', putting him to bronze'

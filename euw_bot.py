@@ -244,7 +244,8 @@ class EuwBot(DiscordBot):
             if api_working:
                 yield from self.message(channel,
                                         '{0}, ты рак, нет такого ника \'{1}\' в лиге на `{2}`. '
-                                        'Ну или риоты API сломали, попробуй попозже.'.format(mention, nickname, region))
+                                        'Ну или риоты API сломали, попробуй попозже.'
+                                        .format(mention, nickname, region.upper()))
             else:
                 api_url = 'https://developer.riotgames.com/api-status/'
                 yield from self.message(channel,
@@ -360,7 +361,7 @@ class EuwBot(DiscordBot):
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
-        current_region = self.users.get_or_create_server(mobj.server.id).parameters.get_region()
+        current_region = self.users.get_or_create_server(mobj.server.id).parameters.get_region().upper()
         yield from self.message(mobj.channel, 'Текущий регион: `{0}`'.format(current_region))
 
     @DiscordBot.admin_action('<Регион ({0})>'.format(RiotAPI.allowed_regions))
@@ -380,9 +381,10 @@ class EuwBot(DiscordBot):
             self.logger.info('Recieved !region command for \'%s\' on %s', region, mobj.server.name)
 
             if self.users.set_server_region(mobj.server.id, region):
-                yield from self.message(mobj.channel, 'Установил регион `{0}` на сервере.'.format(region))
+                yield from self.message(mobj.channel, 'Установил регион `{0}` на сервере.'.format(region.upper()))
             else:
-                yield from self.message(mobj.channel, self.region_set_error + ', `{0}` не подходит'.format(region))
+                yield from self.message(mobj.channel,
+                                        self.region_set_error + ', `{0}` не подходит'.format(region.upper()))
         else:
             yield from self.message(mobj.channel, self.region_set_error)
             return
@@ -406,9 +408,9 @@ class EuwBot(DiscordBot):
         try:
             self.riot_api.get_user_id(self.api_check_data['name'], self.api_check_data['region'])
             self.api_is_working = True
-            self.logger('Riot API is working properly.')
+            self.logger.info('Riot API is working properly.')
         except RiotAPI.UserIdNotFoundException as _:
-            self.logger.error('Checking RiotAPI failed - api is not working')
+            self.logger.warning('Checking RiotAPI failed - api is not working')
         return self.api_is_working
 
 

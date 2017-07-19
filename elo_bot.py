@@ -208,6 +208,20 @@ class EloBot(DiscordBot):
         pass
 
     @asyncio.coroutine
+    def change_member_nickname(self, member, new_name):
+        if new_name != member.display_name:
+            try:
+                self.logger.info('Setting nickname: \'{0}\' for \'{1}\''
+                                 .format(new_name, member).encode('utf-8'))
+                yield from self.client.change_nickname(member, new_name)
+            except discord.errors.Forbidden as e:
+                self.logger.error('Error setting nickname: %s', e)
+                return False
+        else:
+            self.logger.info('Not changing nickname to \'{0}\' for \'{1}\''.format(new_name, member).encode('utf-8'))
+        return True
+
+    @asyncio.coroutine
     def change_lol_nickname(self, member, nickname, channel):
         try:
             mention = member.mention
@@ -236,17 +250,7 @@ class EloBot(DiscordBot):
             new_name = nick_manager.get_combined_nickname(member)
             nick_success = True
             if new_name:
-                if new_name != member.name:
-                    try:
-                        self.logger.info('Setting nickname: \'{0}\' for \'{1}\''
-                                         .format(new_name, member).encode('utf-8'))
-                        yield from self.client.change_nickname(member, new_name)
-                    except discord.errors.Forbidden as e:
-                        nick_success = False
-                        self.logger.error('Error setting nickname: %s', e)
-                else:
-                    self.logger.info('Not changing nickname to \'{0}\' for \'{1}\''
-                                     .format(new_name, member).encode('utf-8'))
+                nick_success = yield from self.change_member_nickname(member, new_name)
 
             # Replying
             if role_success:
@@ -356,14 +360,7 @@ class EloBot(DiscordBot):
             new_name = NicknamesManager.create_full_name(base_name, game_name)
         else:
             new_name = base_name
-
-        try:
-            self.logger.info('Setting nickname: \'{0}\''.format(new_name).encode('utf-8'))
-            yield from self.client.change_nickname(mobj.author, new_name)
-            nick_success = True
-        except discord.errors.Forbidden as e:
-            self.logger.error('Error setting nickname: %s', e)
-            nick_success = False
+        nick_success = yield from self.change_member_nickname(mobj.author, new_name)
 
         mention = mobj.author.mention
         if nick_success:

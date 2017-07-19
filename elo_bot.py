@@ -419,6 +419,7 @@ class EloBot(DiscordBot):
         Reboot the bot entirely
         """
         self.logger.info('Owner \'%s\' called full reboot, closing the program.', mobj.author)
+        yield from self.message(mobj.channel, 'Слушаюсь, милорд.')
         yield from self.client.close()
 
     def check_api_if_needed(self):

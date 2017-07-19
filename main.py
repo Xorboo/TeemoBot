@@ -1,6 +1,6 @@
 from logging_settings import logging
 import sys
-from euw_bot import EuwBot
+from elo_bot import EloBot
 # from users_c import UsersC
 
 if __name__ == "__main__":
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     #users = UsersC(data_folder)
     #if False:
 
-    b = EuwBot(data_folder)
+    b = EloBot(data_folder)
     if b.all_tokens_are_valid:
         b.run()
     else:

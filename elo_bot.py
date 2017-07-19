@@ -11,7 +11,7 @@ from answers import Answers
 from emojis import Emojis
 
 
-class EuwBot(DiscordBot):
+class EloBot(DiscordBot):
     logger = logging.getLogger(__name__)
 
     parameters_file_name = 'parameters.json'
@@ -24,12 +24,12 @@ class EuwBot(DiscordBot):
     api_check_data = {'name': 'Xorboo', 'region': 'euw'}
 
     def __init__(self, data_folder):
-        self.parameters_file_path = os.path.join(data_folder, EuwBot.parameters_file_name)
+        self.parameters_file_path = os.path.join(data_folder, EloBot.parameters_file_name)
         with open(self.parameters_file_path) as parameters_file:
             self.parameters_data = json.load(parameters_file)
         self.logger.info('Loaded parameters file from \'%s\'', self.save_parameters())
 
-        super(EuwBot, self).__init__(self.parameters_data["discord"])
+        super(EloBot, self).__init__(self.parameters_data["discord"])
         self.riot_api = RiotAPI(self.parameters_data["riot_api_key"])
         self.users = Users(data_folder)
         self.emoji = Emojis()
@@ -177,13 +177,31 @@ class EuwBot(DiscordBot):
                 self.logger.info('No help for key \'%s\' found', key)
 
         self.logger.info('Sending generic help')
-        output = '# Доступные команды:\n\n'
-        for c in ['{0}'.format(k) for k in self.ACTIONS.keys()]:
-            output += '* {0} {1}\n'.format(c, self.HELPMSGS.get(c, ""))
-        output += '\nВведи \'{0}help <command>\' для получения *большей инфы по каждой команде.'\
+        prefix = '# Доступные команды:\n\n'
+        postfix = '\nВведи \'{0}help <command>\' для получения *большей инфы по каждой команде.'\
             .format(DiscordBot.PREFIX)
-        msg = yield from self.message(mobj.channel, self.pre_text(output))
-        return msg
+
+        full_text = self.get_help_string(prefix, postfix, self.ACTIONS)
+        yield from self.message(mobj.channel, full_text)
+
+        if self.is_admin(mobj.author):
+            self.logger.info('Sending admin commands help to %s', mobj.author)
+            prefix = '# Доступные админские команды:\n\n'
+            full_text = self.get_help_string(prefix, postfix, self.ADMIN_ACTIONS)
+            yield from self.message(mobj.author, full_text)
+
+        if self.is_owner(mobj.author):
+            self.logger.info('Sending owner commands help to %s', mobj.author)
+            prefix = '# Доступные команды владельца:\n\n'
+            full_text = self.get_help_string(prefix, postfix, self.OWNER_ACTIONS)
+            yield from self.message(mobj.author, full_text)
+
+    def get_help_string(self, prefix, postfix, dictionary):
+        output = prefix
+        for c in ['{0}'.format(k) for k in dictionary.keys()]:
+            output += '* {0} {1}\n'.format(c, self.HELPMSGS.get(c, ""))
+        output += postfix
+        return self.pre_text(output)
 
     @DiscordBot.message_listener()
     def on_message(self, mobj):
@@ -216,15 +234,19 @@ class EuwBot(DiscordBot):
             # Updating user nickname
             nick_manager = NicknamesManager(self.users)
             new_name = nick_manager.get_combined_nickname(member)
+            nick_success = True
             if new_name:
-                try:
-                    self.logger.info('Setting nickname: \'{0}\' for \'{1}\''
+                if new_name != member.name:
+                    try:
+                        self.logger.info('Setting nickname: \'{0}\' for \'{1}\''
+                                         .format(new_name, member).encode('utf-8'))
+                        yield from self.client.change_nickname(member, new_name)
+                    except discord.errors.Forbidden as e:
+                        nick_success = False
+                        self.logger.error('Error setting nickname: %s', e)
+                else:
+                    self.logger.info('Not changing nickname to \'{0}\' for \'{1}\''
                                      .format(new_name, member).encode('utf-8'))
-                    yield from self.client.change_nickname(member, new_name)
-                    nick_success = True
-                except discord.errors.Forbidden as e:
-                    self.logger.error('Error setting nickname: %s', e)
-                    nick_success = False
 
             # Replying
             if role_success:
@@ -250,10 +272,11 @@ class EuwBot(DiscordBot):
                 api_url = 'https://developer.riotgames.com/api-status/'
                 yield from self.message(channel,
                                         '{0}, Ближайшие пару недель я буду периодически не работать. '
-                                        'Проверь здесь ({1}), если там все в порядке, то напиши о проблеме {2}. '
-                                        'Но вообще я и сам ему напишу...'.format(mention, api_url, self.owner.mention))
-                yield from self.message(self.owner, 'Тут на \'{0}\' юзер \'{1}\' пытается установить себе ник \'{2}\', '
-                                                    'а АПИ лежит...'.format(member, nickname, channel))
+                                        'Проверь тут ({1}), если там все в порядке, то напиши о проблеме `{2}` ({3}). '
+                                        'Но вообще я и сам ему напишу...'
+                                        .format(mention, api_url, self.owner, self.owner.mention))
+                yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
+                                                    'а АПИ лежит...'.format(channel.server, member, nickname))
                 # yield from self.message(channel,
                 #                        '{0}, судя по всему рито сломали их API. '
                 #                        'Проверь здесь, что все хорошо, либо подожди немного: '
@@ -389,13 +412,14 @@ class EuwBot(DiscordBot):
             yield from self.message(mobj.channel, self.region_set_error)
             return
 
-    @DiscordBot.admin_action('URURU')
+    @DiscordBot.owner_action('')
     @asyncio.coroutine
-    def ururu(self, args, mobj):
+    def reboot(self, _, mobj):
         """
-        Сказать овнера
+        Reboot the bot entirely
         """
-        yield from self.message(mobj.channel, self.owner.mention)
+        self.logger.info('Owner \'%s\' called full reboot, closing the program.', mobj.author)
+        yield from self.client.close()
 
     def check_api_if_needed(self):
         current_time = time.time()

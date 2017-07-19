@@ -22,10 +22,10 @@ class DiscordBot:
     @staticmethod
     def pre_text(msg, lang=None):
         """"Encapsulate a string in a <pre> container"""
-        s = "```Markdown\n{}\n```"
+        s = '```Markdown\n{}\n```'
         if lang is not None:
-            s = s.format(format+"\n{}")
-        return s.format(msg.rstrip().strip("\n").replace("\t", ""))
+            s = s.format(format+'\n{}')
+        return s.format(msg.rstrip().strip('\n').replace('\t', ''))
 
     @staticmethod
     def is_admin(member):
@@ -108,7 +108,7 @@ class DiscordBot:
         # self.token = DiscordBot.load_token(token_file_path)
         self.token = parameters_json["token"]
         self.owner_id = parameters_json["owner_id"]
-        self.owner = discord.User(username='Xorboo', id=self.owner_id, discriminator='1337', avatar='')
+        self.owner = discord.User(username='Xorboo', id=self.owner_id, discriminator='6178', avatar='')
 
     @property
     def token_is_valid(self):

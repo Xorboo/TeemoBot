@@ -26,7 +26,7 @@ class RiotAPI:
 
     _base_url = 'https://{0}.api.riotgames.com/'
     _summoner_url = 'lol/summoner/v3/summoners/'
-    _league_url = 'api/lol/{0}/v2.5/league/'
+    _league_url = 'lol/league/v3/'
 
     allowed_regions = 'euw | eune | na | ru | kr | br | oce | jp | tr | lan | las'
     _regions = {
@@ -132,13 +132,13 @@ class RiotAPI:
         user_id_str = str(user_id)
 
         best_rank = 'unranked'
-        ranks_content = self.send_request(RiotAPI.league_url(region) + 'by-summoner/' + user_id_str, region)
+        ranks_content = self.send_request(RiotAPI.league_url(region) + 'positions/by-summoner/' + user_id_str, region)
         if ranks_content:
             best_rank_id = RiotAPI.ranks[best_rank]
 
             ranks_data = json.loads(ranks_content)
-            game_modes = ranks_data[user_id_str]
-            for mode in game_modes:
+            # game_modes = ranks_data[user_id_str]
+            for mode in ranks_data:
                 rank = mode['tier'].lower()
                 rank_id = RiotAPI.ranks[rank]
                 if rank_id > best_rank_id:

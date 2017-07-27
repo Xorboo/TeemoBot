@@ -29,6 +29,7 @@ class Emojis:
             'poro': 'poro',
             'tw_Kappa': 'kappa',
             'amumu': 'amumu',
+            'tier_0_unranked': 'unranked',
             'tier_1_bronze': 'bronze',
             'tier_2_silver': 'silver',
             'tier_3_gold': 'gold',

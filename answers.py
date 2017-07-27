@@ -109,8 +109,8 @@ class Answers:
         possible = Answers.role_answers[role]
         answer = random.choice(possible)
         emoji_name = role.lower()
-        if emoji_name == 'unranked':
-            emoji_name = 'amumu'
+        # if emoji_name == 'unranked':
+        #     emoji_name = 'amumu'
         return answer + emoji.get(emoji_name)
 
     @staticmethod

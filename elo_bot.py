@@ -6,7 +6,7 @@ import discord
 import json
 from discord_bot import DiscordBot
 from riot import RiotAPI
-from users import Users
+from users import Users, UserData
 from answers import Answers
 from emojis import Emojis
 
@@ -260,9 +260,10 @@ class EloBot(DiscordBot):
                                      .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
                     rank = EloBot.rollback_rank
                     if not silent:
+                        required_hash = UserData.create_hash(game_user_id, member.id)
                         confirm_reply = '{0}, если ты правда с хай-эло - переименуй страницу рун на `{1}` и ' \
                                         'подверди свой ник командой `!confirm`. ' \
-                                        'А пока что будешь с таким рангом :3'.format(mention, user.bind_hash)
+                                        'А пока что будешь с таким рангом :3'.format(mention, required_hash)
                         yield from self.message(channel, confirm_reply)
 
             # Saving user to database

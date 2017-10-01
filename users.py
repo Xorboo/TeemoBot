@@ -194,7 +194,11 @@ class UserData(object):
 
     @property
     def bind_hash(self):
-        data = '{0}{1}{2}'.format(self.game_id, Users.salt, self.discord_id)
+        return UserData.create_hash(self.game_id, self.discord_id)
+
+    @staticmethod
+    def create_hash(game_id, discord_id):
+        data = '{0}{1}{2}'.format(game_id, Users.salt, discord_id)
         m = md5()
         m.update(data.encode('utf-8'))
         bind_hash = m.hexdigest()

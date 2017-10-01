@@ -25,6 +25,7 @@ class EloBot(DiscordBot):
     # Ranks that will require account confirmation
     confirmation_ranks = ['diamond', 'master', 'challenger']
     rollback_rank = 'bronze'
+    salt = '#$some_$alt#'
 
     def __init__(self, data_folder):
         self.parameters_file_path = os.path.join(data_folder, EloBot.parameters_file_name)
@@ -32,8 +33,9 @@ class EloBot(DiscordBot):
             self.parameters_data = json.load(parameters_file)
         self.logger.info('Loaded parameters file from \'%s\'', self.save_parameters())
 
-        super(EloBot, self).__init__(self.parameters_data["discord"])
-        self.riot_api = RiotAPI(self.parameters_data["riot_api_key"])
+        super(EloBot, self).__init__(self.parameters_data['discord'])
+        self.riot_api = RiotAPI(self.parameters_data['riot_api_key'])
+        Users.salt = self.parameters_data['salt']
         self.users = Users(data_folder)
         self.emoji = Emojis()
 
@@ -252,7 +254,7 @@ class EloBot(DiscordBot):
                     user.confirmed = False
 
             # Checking high-elo
-            if not user.confirmed:
+            if not user.is_confirmed:
                 if rank in EloBot.confirmation_ranks:
                     self.logger.info('User {0} requested {1} using nickname \'{2}\', putting him to {3}'
                                      .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
@@ -289,7 +291,7 @@ class EloBot(DiscordBot):
 
                 if not nick_success:
                     yield from self.message(
-                        channel, '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
+                        channel, '{0}, поменяй себе ник на `{1}` сам, у меня прав нет.'.format(mention, new_name))
 
         except RiotAPI.UserIdNotFoundException as _:
             if silent:
@@ -297,7 +299,7 @@ class EloBot(DiscordBot):
             api_working = self.check_api_if_needed()
             if api_working:
                 yield from self.message(channel,
-                                        '{0}, ты рак, нет такого ника \'{1}\' в лиге на `{2}`. '
+                                        '{0}, ты рак, нет такого ника `{1}` в лиге на `{2}`. '
                                         'Ну или риоты API сломали, попробуй попозже.'
                                         .format(member.mention, nickname, region.upper()))
             else:
@@ -308,14 +310,14 @@ class EloBot(DiscordBot):
                                         'Но вообще я и сам ему напишу...'
                                         .format(member.mention, api_url, self.owner, self.owner.mention))
                 yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
-                                                    'а АПИ лежит...'.format(channel.server, mention, nickname))
+                                                    'а АПИ лежит...'.format(channel.server, member, user.nickname))
 
         except RolesManager.RoleNotFoundException as _:
             if silent:
                 return
             yield from self.message(channel,
                                     'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
-                                    'Скажи админу чтобы добавил роль \'{1}\''.format(mention, rank))
+                                    'Скажи админу чтобы добавил роль `{1}`'.format(mention, rank))
 
     @asyncio.coroutine
     def change_lol_nickname(self, member, nickname, channel):
@@ -450,8 +452,12 @@ class EloBot(DiscordBot):
 
         bind_hash = user_data.bind_hash
         region = server.parameters.get_region()
-        has_required_page = self.riot_api.check_user_runepage(user_data.game_id, bind_hash, region)
+        if not user_data.game_id:
+            yield from self.message(mobj.channel, 'У тебя устаревшие данные, выполни сначала команду `!nick'
+                                    .format(mobj.author.mention))
+            return
 
+        has_required_page = self.riot_api.check_user_runepage(user_data.game_id, bind_hash, region)
         if has_required_page:
             conflicted_user_ids = self.users.confirm_user(user_data, server)
             yield from self.update_user(mobj.author, user_data, mobj.channel, check_is_conflicted=False, silent=True)

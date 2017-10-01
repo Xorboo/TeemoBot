@@ -1,0 +1,8 @@
+{
+	"riot_api_key": "%RGAPI-YOUR_RIOT_API_KEY%",
+	"salt": "%SALT_FOR_CONFIRM_COMMAND%",
+	"discord": {
+		"token": "%YOUR_DISCORD_BOT_TOKEN%",
+		"owner_id": "%YOUR_ID_FOR_SPECIAL_COMMANDS%"
+	}
+}

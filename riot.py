@@ -136,7 +136,7 @@ class RiotAPI:
 
         user_content = self.send_request(api_url, region)
         if user_content is None:
-            self.logger.info('Couldn\'t find user by \'{0}\' or id \'{1}\''.format(nickname).encode('utf-8'), user_id)
+            self.logger.info('Couldn\'t find user by \'{0}\' or id \'{1}\''.format(nickname, user_id).encode('utf-8'))
             raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
 
         user_data_json = json.loads(user_content)
@@ -163,11 +163,12 @@ class RiotAPI:
         return best_rank, real_id, real_name
 
     def check_user_runepage(self, summoner_id, page_name, region):
+        page_name = page_name.strip()
         url = '{0}by-summoner/{1}'.format(RiotAPI.runes_url(region), summoner_id)
         runepages_response = self.send_request(url, region)
         runepages = json.loads(runepages_response)['pages']
         for runepage in runepages:
-            if runepage['name'] == page_name:
+            if runepage['name'].strip() == page_name:
                 return True
         return False
 

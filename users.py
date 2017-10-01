@@ -8,6 +8,7 @@ from riot import RiotAPI
 class Users:
     logger = logging.getLogger(__name__)
 
+    salt = 'some_salt'
     file_name = 'users.json'
 
     def __init__(self, data_folder):
@@ -145,7 +146,7 @@ class ServerData(object):
 
     def find_confirmed_user(self, game_id):
         for u in self.users:
-            if u.confirmed and u.game_id == game_id:
+            if u.is_confirmed and u.game_id == game_id:
                 return u
         return None
 
@@ -186,8 +187,14 @@ class UserData(object):
         self.confirmed = confirmed
 
     @property
+    def is_confirmed(self):
+        if not hasattr(self, 'confirmed'):
+            self.confirmed = False
+        return self.confirmed
+
+    @property
     def bind_hash(self):
-        data = str(self.game_id) + 'dat some good salt' + str(self.discord_id)
+        data = '{0}{1}{2}'.format(self.game_id, Users.salt, self.discord_id)
         m = md5()
         m.update(data.encode('utf-8'))
         bind_hash = m.hexdigest()

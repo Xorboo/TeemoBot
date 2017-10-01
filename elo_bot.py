@@ -22,6 +22,9 @@ class EloBot(DiscordBot):
 
     api_check_period = 60
     api_check_data = {'name': 'Xorboo', 'region': 'euw'}
+    # Ranks that will require account confirmation
+    confirmation_ranks = ['diamond', 'master', 'challenger']
+    rollback_rank = 'bronze'
 
     def __init__(self, data_folder):
         self.parameters_file_path = os.path.join(data_folder, EloBot.parameters_file_name)
@@ -226,6 +229,7 @@ class EloBot(DiscordBot):
 
     @asyncio.coroutine
     def update_user(self, member, user, channel, check_is_conflicted=False, silent=False):
+        mention = member.mention
         try:
             # Getting user elo using RiotAPI
             server = self.users.get_or_create_server(channel.server.id)
@@ -239,7 +243,7 @@ class EloBot(DiscordBot):
                     if confirmed_user.discord_id != user.discord_id:
                         if not silent:
                             error_reply = 'Не могу поставить тебе ник `{0}`, {1}, он уже занят за <@!{2}>'\
-                                .format(nickname, member.mention, confirmed_user.discord_id)
+                                .format(nickname, mention, confirmed_user.discord_id)
                             yield from self.message(channel, error_reply)
                         return
 
@@ -249,14 +253,14 @@ class EloBot(DiscordBot):
 
             # Checking high-elo
             if not user.confirmed:
-                if rank == 'diamond' or rank == 'master' or rank == 'challenger':
-                    self.logger.info('User {0} requested master+ using nickname \'{1}\', putting him to bronze'
-                                     .format(member, nickname).encode('utf-8'))
-                    rank = 'bronze'
+                if rank in EloBot.confirmation_ranks:
+                    self.logger.info('User {0} requested {1} using nickname \'{2}\', putting him to {3}'
+                                     .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
+                    rank = EloBot.rollback_rank
                     if not silent:
                         confirm_reply = '{0}, если ты правда с хай-эло - переименуй страницу рун на `{1}` и ' \
                                         'подверди свой ник командой `!confirm`. ' \
-                                        'А пока что сделаю тебя брозной'.format(member.mention, user.bind_hash)
+                                        'А пока что будешь с таким рангом :3'.format(mention, user.bind_hash)
                         yield from self.message(channel, confirm_reply)
 
             # Saving user to database
@@ -281,11 +285,11 @@ class EloBot(DiscordBot):
                 else:
                     yield from self.message(channel,
                                             'Эй, {0}, у меня недостаточно прав чтобы выставить твою роль, '
-                                            'скажи админу чтобы перетащил мою роль выше остальных.'.format(member.mention))
+                                            'скажи админу чтобы перетащил мою роль выше остальных.'.format(mention))
 
                 if not nick_success:
                     yield from self.message(
-                        channel, '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(member.mention, new_name))
+                        channel, '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
 
         except RiotAPI.UserIdNotFoundException as _:
             if silent:
@@ -304,14 +308,14 @@ class EloBot(DiscordBot):
                                         'Но вообще я и сам ему напишу...'
                                         .format(member.mention, api_url, self.owner, self.owner.mention))
                 yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
-                                                    'а АПИ лежит...'.format(channel.server, member.mention, nickname))
+                                                    'а АПИ лежит...'.format(channel.server, mention, nickname))
 
         except RolesManager.RoleNotFoundException as _:
             if silent:
                 return
             yield from self.message(channel,
                                     'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
-                                    'Скажи админу чтобы добавил роль \'{1}\''.format(member.mention, rank))
+                                    'Скажи админу чтобы добавил роль \'{1}\''.format(mention, rank))
 
     @asyncio.coroutine
     def change_lol_nickname(self, member, nickname, channel):
@@ -413,6 +417,19 @@ class EloBot(DiscordBot):
 
     @DiscordBot.action('')
     @asyncio.coroutine
+    def update(self, _, mobj):
+        channel = mobj.channel
+        yield from self.client.send_typing(channel)
+
+        member = mobj.author
+        user = self.users.get_user(member)
+        if user and user.has_data:
+            yield from self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
+        else:
+            yield from self.message(channel, 'Сначала поставь себе ник через `!nick`, {0}'.format(member.mention))
+
+    @DiscordBot.action('')
+    @asyncio.coroutine
     def confirm(self, _, mobj):
         """
         Подтвердить свой игровой ник. Подтвежденные ники не могут быть выбраны другими людьми на данном канале
@@ -423,6 +440,7 @@ class EloBot(DiscordBot):
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
+        yield from self.client.send_typing(mobj.channel)
         server = self.users.get_or_create_server(mobj.channel.server.id)
         user_data = server.get_user(mobj.author.id)
         if not user_data:
@@ -470,7 +488,7 @@ class EloBot(DiscordBot):
                 conflicted_members.append(conflicted_member)
         if conflicted_members:
             for member in conflicted_members:
-                yield from self.clear_name_and_elo(self, member, reply_channel.server)
+                yield from self.clear_name_and_elo(member, reply_channel.server)
             members_mentions = ', '.join([x.mention for x in conflicted_members])
             conflict_reply = '{0}: очистил эло, зачем чужие ники юзать, а?'.format(members_mentions)
             yield from self.message(reply_channel, conflict_reply)

@@ -145,7 +145,7 @@ class ServerData(object):
 
     def find_confirmed_user(self, game_id):
         for u in self.users:
-            if u.game_id == game_id:
+            if u.confirmed and u.game_id == game_id:
                 return u
         return None
 
@@ -167,6 +167,8 @@ class ServerData(object):
             else:
                 new_users_list.append(u)
 
+        # Thats so un-optimal, i can't even...
+        self.users = new_users_list
         return user_discord_ids
 
     @property
@@ -190,6 +192,10 @@ class UserData(object):
         m.update(data.encode('utf-8'))
         bind_hash = m.hexdigest()
         return bind_hash[:10]
+
+    @property
+    def has_data(self):
+        return self.game_id or self.nickname
 
 
 class ServerParameters(object):

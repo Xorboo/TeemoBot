@@ -13,8 +13,8 @@ if __name__ == "__main__":
     data_folder = sys.argv[1]
     logger.info('Selected data folder: %s', data_folder)
 
-    #users = UsersC(data_folder)
-    #if False:
+    # users = UsersC(data_folder)
+    # if False:
 
     b = EloBot(data_folder)
     if b.all_tokens_are_valid:

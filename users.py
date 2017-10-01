@@ -99,6 +99,11 @@ class ServersData(object):
             server.parameters = ServerParameters()
         return server
 
+    def get_server_by_index(self, index):
+        if 0 <= index < self.total_servers:
+            return self.servers[index]
+        return None
+
     def create_server(self, server_id):
         server = ServerData(server_id)
         self.servers.append(server)
@@ -133,6 +138,11 @@ class ServerData(object):
 
     def get_user(self, discord_id):
         return next((u for u in self.users if u.discord_id == discord_id), None)
+
+    def get_user_by_index(self, index):
+        if 0 <= index < self.total_users:
+            return self.users[index]
+        return None
 
     def remove_user(self, discord_id):
         user = self.get_user(discord_id)

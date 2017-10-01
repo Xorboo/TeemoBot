@@ -127,7 +127,7 @@ class RiotAPI:
 
     def get_summoner_data(self, region, user_id=None, nickname=None):
         if user_id:
-            api_url = RiotAPI.summoner_url(region) + 'by-name/' + urllib.parse.quote(nickname)
+            api_url = '{0}{1}'.format(RiotAPI.summoner_url(region), user_id)
         elif nickname:
             encoded_nickname = urllib.parse.quote(nickname.lower())
             api_url = '{0}by-name/{1}'.format(RiotAPI.summoner_url(region), encoded_nickname)
@@ -149,17 +149,22 @@ class RiotAPI:
         best_rank = 'unranked'
         url = '{0}positions/by-summoner/{1}'.format(RiotAPI.league_url(region), real_id)
         ranks_content = self.send_request(url, region)
-        if ranks_content:
-            best_rank_id = RiotAPI.ranks[best_rank]
+        if not ranks_content:
+            raise RiotAPI.GetUserRankException('Error while getting leagues data for {0}'.format(real_name))
 
-            ranks_data = json.loads(ranks_content)
-            # game_modes = ranks_data[user_id_str]
-            for mode in ranks_data:
-                rank = mode['tier'].lower()
-                rank_id = RiotAPI.ranks[rank]
-                if rank_id > best_rank_id:
-                    best_rank = rank
-                    best_rank_id = rank_id
+        best_rank_id = RiotAPI.ranks[best_rank]
+
+        ranks_data = json.loads(ranks_content)
+        # game_modes = ranks_data[user_id_str]
+        for mode in ranks_data:
+            queue = mode['queueType']
+            if queue != 'RANKED_SOLO_5x5' and queue != 'RANKED_FLEX_SR':
+                continue
+            rank = mode['tier'].lower()
+            rank_id = RiotAPI.ranks[rank]
+            if rank_id > best_rank_id:
+                best_rank = rank
+                best_rank_id = rank_id
         return best_rank, real_id, real_name
 
     def check_user_runepage(self, summoner_id, page_name, region):
@@ -173,4 +178,7 @@ class RiotAPI:
         return False
 
     class UserIdNotFoundException(Exception):
+        pass
+
+    class GetUserRankException(Exception):
         pass

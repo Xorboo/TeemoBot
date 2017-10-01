@@ -27,6 +27,7 @@ class RiotAPI:
     _base_url = 'https://{0}.api.riotgames.com/'
     _summoner_url = 'lol/summoner/v3/summoners/'
     _league_url = 'lol/league/v3/'
+    _runes_url = 'lol/platform/v3/runes/'
 
     allowed_regions = 'euw | eune | na | ru | kr | br | oce | jp | tr | lan | las'
     _regions = {
@@ -73,6 +74,15 @@ class RiotAPI:
             RiotAPI.logger.error('Requested unknown region for league_url: \'%s\'', region)
             return ''
 
+    @staticmethod
+    def runes_url(region):
+        if RiotAPI.has_region(region):
+            league_region = RiotAPI._regions[region]['league']
+            return RiotAPI._runes_url.format(league_region)
+        else:
+            RiotAPI.logger.error('Requested unknown region for league_url: \'%s\'', region)
+            return ''
+
     @property
     def api_key(self):
         return self._api_key
@@ -115,24 +125,30 @@ class RiotAPI:
             self.logger.error('Error while sending request to RiotAPI: %s', e)
         return content
 
-    def get_user_id(self, nickname, region):
-        nickname = nickname.lower()
-        user_id_url = RiotAPI.summoner_url(region) + 'by-name/' + urllib.parse.quote(nickname)
-        user_content = self.send_request(user_id_url, region)
+    def get_summoner_data(self, region, user_id=None, nickname=None):
+        if user_id:
+            api_url = RiotAPI.summoner_url(region) + 'by-name/' + urllib.parse.quote(nickname)
+        elif nickname:
+            encoded_nickname = urllib.parse.quote(nickname.lower())
+            api_url = '{0}by-name/{1}'.format(RiotAPI.summoner_url(region), encoded_nickname)
+        else:
+            raise Exception('No user id or nickname provided for RiotAPI')
+
+        user_content = self.send_request(api_url, region)
         if user_content is None:
-            self.logger.info('Couldn\'t find user \'{0}\''.format(nickname).encode('utf-8'))
+            self.logger.info('Couldn\'t find user by \'{0}\' or id \'{1}\''.format(nickname).encode('utf-8'), user_id)
             raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
 
         user_data_json = json.loads(user_content)
         return user_data_json['id'], user_data_json['name'].strip()
 
-    def get_user_elo(self, nickname, region):
+    def get_user_info(self, region, user_id=None, nickname=None):
         self.logger.info('Getting user elo for \'{0}\''.format(nickname).encode('utf-8'))
-        user_id, real_name = self.get_user_id(nickname, region)
-        user_id_str = str(user_id)
+        real_id, real_name = self.get_summoner_data(region, user_id=user_id, nickname=nickname)
 
         best_rank = 'unranked'
-        ranks_content = self.send_request(RiotAPI.league_url(region) + 'positions/by-summoner/' + user_id_str, region)
+        url = '{0}positions/by-summoner/{1}'.format(RiotAPI.league_url(region), real_id)
+        ranks_content = self.send_request(url, region)
         if ranks_content:
             best_rank_id = RiotAPI.ranks[best_rank]
 
@@ -144,12 +160,16 @@ class RiotAPI:
                 if rank_id > best_rank_id:
                     best_rank = rank
                     best_rank_id = rank_id
+        return best_rank, real_id, real_name
 
-        if best_rank == 'master' or best_rank == 'challenger':
-            self.logger.info('User requested master+ using nickname \'{0}\', putting him to bronze'
-                             .format(nickname).encode('utf-8'))
-            best_rank = 'bronze'
-        return best_rank, user_id, real_name
+    def check_user_runepage(self, summoner_id, page_name, region):
+        url = '{0}by-summoner/{1}'.format(RiotAPI.runes_url(region), summoner_id)
+        runepages_response = self.send_request(url, region)
+        runepages = json.loads(runepages_response)['pages']
+        for runepage in runepages:
+            if runepage['name'] == page_name:
+                return True
+        return False
 
     class UserIdNotFoundException(Exception):
         pass

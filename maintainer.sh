@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "$(date) > Starting bot maintainer for rolder $1"
+echo "$(date) > Starting bot maintainer for folder $1"
 if [[ -n "$1" ]]; then
 	DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 	

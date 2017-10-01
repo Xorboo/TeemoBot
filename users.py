@@ -1,5 +1,6 @@
 import os
 import logging
+from hashlib import md5
 import jsonpickle
 from riot import RiotAPI
 
@@ -37,27 +38,29 @@ class Users:
         f.close()
 
     def get_user(self, member):
-        server = self.data.get_server(member.server.id)
-        if server:
-            return server.get_user(member.id)
-        else:
-            return None
-
-    def add_user(self, member, game_user_id, nickname, rank):
-        user_id = member.id
-
         server = self.data.get_or_create_server(member.server.id)
-        user = server.get_user(user_id)
-        if user is None:
-            self.logger.info('Adding new user \'%s\' with nickname: \'%s\' on server \'%s\'',
-                             member, nickname, member.server.name)
-            user = server.create_user(user_id)
+        return server.get_user(member.id)
 
+    def remove_user(self, member):
+        server = self.data.get_or_create_server(member.server.id)
+        server.remove_user(member.id)
+        self.save_users()
+
+    def get_or_create_user(self, member):
+        server = self.data.get_or_create_server(member.server.id)
+        return server.get_or_create_user(member.id)
+
+    def update_user(self, user, game_user_id, nickname, rank):
         user.game_id = game_user_id
         user.nickname = nickname
         user.rank = rank
-
         self.save_users()
+
+    def confirm_user(self, user, server):
+        user.confirmed = True
+        unconfirmed_users = server.remove_unconfirmed_users(user)
+        self.save_users()
+        return unconfirmed_users
 
     def get_or_create_server(self, server_id):
         return self.data.get_or_create_server(server_id)
@@ -130,10 +133,41 @@ class ServerData(object):
     def get_user(self, discord_id):
         return next((u for u in self.users if u.discord_id == discord_id), None)
 
+    def remove_user(self, discord_id):
+        user = self.get_user(discord_id)
+        if user:
+            self.users.remove(user)
+
     def create_user(self, discord_id):
         user = UserData(discord_id)
         self.users.append(user)
         return user
+
+    def find_confirmed_user(self, game_id):
+        for u in self.users:
+            if u.game_id == game_id:
+                return u
+        return None
+
+    def remove_unconfirmed_users(self, user):
+        user_discord_ids = []
+        new_users_list = []
+
+        for u in self.users:
+            have_to_delete = False
+            if u != user:
+                if u.game_id:
+                    if u.game_id == user.game_id:
+                        have_to_delete = True
+                elif u.nickname == user.nickname:
+                    have_to_delete = True
+
+            if have_to_delete:
+                user_discord_ids.append(u.discord_id)
+            else:
+                new_users_list.append(u)
+
+        return user_discord_ids
 
     @property
     def total_users(self):
@@ -141,12 +175,21 @@ class ServerData(object):
 
 
 class UserData(object):
-    def __init__(self, discord_id, rank='', game_id='', nickname=''):
+    def __init__(self, discord_id, rank='', game_id='', nickname='', confirmed=False):
         # Users.logger.info('Creating user \'%s\' with nickname \'%s\'', discord_id, nickname)
         self.discord_id = discord_id
         self.rank = rank
         self.game_id = game_id
         self.nickname = nickname
+        self.confirmed = confirmed
+
+    @property
+    def bind_hash(self):
+        data = str(self.game_id) + 'dat some good salt' + str(self.discord_id)
+        m = md5()
+        m.update(data.encode('utf-8'))
+        bind_hash = m.hexdigest()
+        return bind_hash[:10]
 
 
 class ServerParameters(object):

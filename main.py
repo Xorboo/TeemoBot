@@ -3,6 +3,7 @@ import sys
 from elo_bot import EloBot
 # from users_c import UsersC
 
+
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 

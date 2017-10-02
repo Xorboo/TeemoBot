@@ -25,7 +25,6 @@ class RolesManager:
 
     @asyncio.coroutine
     def set_user_role(self, client, member, role_name):
-        self.logger.info('Setting role \'%s\' for \'%s\'', role_name, member)
 
         role = self.get_role(role_name)
         new_roles = self.get_new_user_roles(member.roles, role)
@@ -33,6 +32,7 @@ class RolesManager:
         has_new_roles = RolesManager.roles_different(member.roles, new_roles)
         try:
             if has_new_roles:
+                self.logger.info('Setting role \'%s\' for \'%s\'', role_name, member)
                 yield from client.replace_roles(member, *new_roles)
             return True, role, has_new_roles
         except discord.errors.Forbidden as e:

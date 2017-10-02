@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from hashlib import md5
 import jsonpickle
 from riot import RiotAPI
@@ -10,8 +11,10 @@ class Users:
 
     salt = 'some_salt'
     file_name = 'users.json'
+    save_period = 300
 
     def __init__(self, data_folder):
+        self.last_save_time = 0
         self.data = ServersData([])
         self.full_path = os.path.join(data_folder, Users.file_name)
         self.load_users()
@@ -32,11 +35,14 @@ class Users:
             self.logger.warning('Couldn\'t open users file, nothing loaded, error: \'%s\'', e)
 
     def save_users(self):
-        self.logger.info('Saving users data to file \'%s\'', self.full_path)
-        f = open(self.full_path, 'w')
-        file_contents = jsonpickle.encode(self.data)
-        f.write(file_contents)
-        f.close()
+        current_time = time.time()
+        if current_time - self.last_save_time > self.save_period:
+            self.logger.info('Saving users data to file \'%s\'', self.full_path)
+            self.last_save_time = current_time
+            f = open(self.full_path, 'w')
+            file_contents = jsonpickle.encode(self.data)
+            f.write(file_contents)
+            f.close()
 
     def get_user(self, member):
         server = self.data.get_or_create_server(member.server.id)

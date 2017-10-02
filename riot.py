@@ -119,11 +119,12 @@ class RiotAPI:
                 self.logger.error('Key is not set, ignoring request \'%s\'', request_url);
                 return content
             url = RiotAPI.base_url(region) + request_url + self.riot_key_request
-            self.logger.info('Sending request to: \'%s\'', url)
+            self.logger.debug('Sending request to: \'%s\'', url)
             content = urllib.request.urlopen(url).read().decode()
+            return content, None
         except urllib.error.HTTPError as e:
             self.logger.error('Error while sending request to RiotAPI: %s', e)
-        return content
+            return None, e.code
 
     def get_summoner_data(self, region, user_id=None, nickname=None):
         if user_id:
@@ -134,23 +135,27 @@ class RiotAPI:
         else:
             raise Exception('No user id or nickname provided for RiotAPI')
 
-        user_content = self.send_request(api_url, region)
+        user_content, error_code = self.send_request(api_url, region)
         if user_content is None:
             self.logger.info('Couldn\'t find user by \'{0}\' or id \'{1}\''.format(nickname, user_id).encode('utf-8'))
-            raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
+            if error_code == 404:
+                raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
+            else:
+                raise RiotAPI.UnknownHTTPException('Unknown request response error: {0}'.format(error_code))
 
         user_data_json = json.loads(user_content)
         return user_data_json['id'], user_data_json['name'].strip()
 
     def get_user_info(self, region, user_id=None, nickname=None):
-        self.logger.info('Getting user elo for \'{0}\''.format(nickname).encode('utf-8'))
+        self.logger.debug('Getting user elo for \'{0}\''.format(nickname).encode('utf-8'))
         real_id, real_name = self.get_summoner_data(region, user_id=user_id, nickname=nickname)
 
         best_rank = 'unranked'
         url = '{0}positions/by-summoner/{1}'.format(RiotAPI.league_url(region), real_id)
-        ranks_content = self.send_request(url, region)
+        ranks_content, error_code = self.send_request(url, region)
         if not ranks_content:
-            raise RiotAPI.GetUserRankException('Error while getting leagues data for {0}'.format(real_name))
+            raise RiotAPI.RiotRequestException('Error while getting leagues data for {0}: {1}'
+                                               .format(real_name, error_code))
 
         best_rank_id = RiotAPI.ranks[best_rank]
 
@@ -170,15 +175,18 @@ class RiotAPI:
     def check_user_runepage(self, summoner_id, page_name, region):
         page_name = page_name.strip()
         url = '{0}by-summoner/{1}'.format(RiotAPI.runes_url(region), summoner_id)
-        runepages_response = self.send_request(url, region)
+        runepages_response, error_code = self.send_request(url, region)
         runepages = json.loads(runepages_response)['pages']
         for runepage in runepages:
             if runepage['name'].strip() == page_name:
                 return True
         return False
 
-    class UserIdNotFoundException(Exception):
+    class RiotRequestException(Exception):
         pass
 
-    class GetUserRankException(Exception):
+    class UserIdNotFoundException(RiotRequestException):
+        pass
+
+    class UnknownHTTPException(RiotRequestException):
         pass

@@ -141,7 +141,7 @@ class RiotAPI:
             if error_code == 404:
                 raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
             else:
-                raise RiotAPI.UnknownHTTPException('Unknown request response error: {0}'.format(error_code))
+                raise RiotAPI.RiotRequestException('Unknown request response error: {0}'.format(error_code))
 
         user_data_json = json.loads(user_content)
         return user_data_json['id'], user_data_json['name'].strip()
@@ -155,7 +155,7 @@ class RiotAPI:
         ranks_content, error_code = self.send_request(url, region)
         if not ranks_content:
             raise RiotAPI.RiotRequestException('Error while getting leagues data for {0}: {1}'
-                                               .format(real_name, error_code))
+                                               .format(real_name, error_code), error_code)
 
         best_rank_id = RiotAPI.ranks[best_rank]
 
@@ -182,11 +182,10 @@ class RiotAPI:
                 return True
         return False
 
+    class UserIdNotFoundException(Exception):
+        pass
+
     class RiotRequestException(Exception):
-        pass
-
-    class UserIdNotFoundException(RiotRequestException):
-        pass
-
-    class UnknownHTTPException(RiotRequestException):
-        pass
+        def __init__(self, message, code):
+            super(RiotAPI.RiotRequestException, self).__init__(message)
+            self.error_code = code

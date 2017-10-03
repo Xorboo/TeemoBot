@@ -5,6 +5,7 @@ import time
 import logging
 import discord
 import json
+import types
 from discord_bot import DiscordBot
 from riot import RiotAPI
 from users import Users, UserData
@@ -27,8 +28,11 @@ class EloBot(DiscordBot):
     # Ranks that will require account confirmation
     confirmation_ranks = ['diamond', 'master', 'challenger']
     rollback_rank = 'bronze'
-    sleep_pause = 5
-    small_sleep_pause = 0.3
+
+    initial_sleep_pause = 20    # Before starting autoupdate
+    success_sleep_pause = 4     # After successful update (for Discord limits)
+    small_sleep_pause = 1       # After check without update (for RiotAPI limits)
+    long_sleep_pause = 300      # If over-limited RiotAPI
 
     def __init__(self, data_folder):
         self.parameters_file_path = os.path.join(data_folder, EloBot.parameters_file_name)
@@ -86,20 +90,18 @@ class EloBot(DiscordBot):
 
     @asyncio.coroutine
     def autoupdate_users_data(self):
-        # Between succsessful rank changes
-        sleep_pause = 5
         yield from self.client.wait_until_ready()
-        yield from asyncio.sleep(sleep_pause)
+        yield from asyncio.sleep(self.initial_sleep_pause)
 
         while not self.client.is_closed:
             try:
                 yield from self.autoupdate_from_users()
-                yield from asyncio.sleep(sleep_pause)
+                yield from asyncio.sleep(self.success_sleep_pause)
                 yield from self.autoupdate_from_members()
-                yield from asyncio.sleep(sleep_pause)
+                yield from asyncio.sleep(self.success_sleep_pause)
             except Exception:
                 self.logger.error('Autoupdate loop exception: {0}'.format(traceback.format_exc()))
-                yield from asyncio.sleep(sleep_pause)
+                yield from asyncio.sleep(self.success_sleep_pause)
 
     @asyncio.coroutine
     def autoupdate_from_users(self):
@@ -119,9 +121,8 @@ class EloBot(DiscordBot):
                 except Exception:
                     self.logger.error('Autoupdate user_data exception: {0}'.format(traceback.format_exc()))
                 if success:
-                    yield from asyncio.sleep(self.sleep_pause)
-                else:
-                    yield from asyncio.sleep(self.small_sleep_pause)
+                    yield from asyncio.sleep(self.success_sleep_pause)
+                yield from asyncio.sleep(self.small_sleep_pause)
                 user_index += 1
             server_index += 1
         self.logger.info('Autoupdating using USERS data - completed')
@@ -144,13 +145,13 @@ class EloBot(DiscordBot):
                 if user_data:
                     success = yield from self.autoupdate_user(server_data, user_data)
                     if success:
-                        yield from asyncio.sleep(self.sleep_pause)
+                        yield from asyncio.sleep(self.success_sleep_pause)
                 else:
                     user_cleared = yield from self.clear_name_and_elo(member, server)
                     if user_cleared:
                         yield from self.message(channel, '{0}, тебя не было в базе, обнулил твои данные. '
-                                              'Повтори `!nick` для возвращения эло.'.format(member.mention))
-                        yield from asyncio.sleep(self.sleep_pause)
+                                                'Повтори `!nick` для возвращения эло.'.format(member.mention))
+                        yield from asyncio.sleep(self.success_sleep_pause)
                 yield from asyncio.sleep(self.small_sleep_pause)
                 member_index += 1
             server_index += 1
@@ -165,9 +166,16 @@ class EloBot(DiscordBot):
         if not member:
             return False
         channel = next((x for x in server.channels if x.name == 'bots' or x.name == 'bot'), server.default_channel)
-        rank_changed, name_changed = yield from self.update_user(
+        result = yield from self.update_user(
             member, user, channel, check_is_conflicted=True, silent=False, is_new_data=False)
-        return rank_changed or name_changed
+        if result.api_error:
+            self.logger.error('Autoupdate request riot API error: %s', result.api_error)
+            yield from asyncio.sleep(self.long_sleep_pause)
+
+        # Periodic extra save call in case we have changes
+        self.users.save_users(check_if_dirty=True)
+        
+        return result.rank or result.name
 
     @asyncio.coroutine
     def check_no_elo_members(self, s):
@@ -323,8 +331,9 @@ class EloBot(DiscordBot):
 
     @asyncio.coroutine
     def update_user(self, member, user, channel, check_is_conflicted=False, silent=False, is_new_data=True):
-        rank_probably_changed = False
-        has_new_nickname = False
+        result = types.SimpleNamespace()
+        result.rank = result.name = False
+        result.api_error = None
 
         self.logger.debug('Update member {0} with game name {1} from channel {2}'.format(member, user.nickname, channel))
         mention = member.mention
@@ -345,7 +354,7 @@ class EloBot(DiscordBot):
                             error_reply = 'Не могу поставить тебе ник `{0}`, {1}, он уже занят за <@!{2}>'\
                                 .format(nickname, mention, confirmed_user.discord_id)
                             yield from self.message(channel, error_reply)
-                        return False, False
+                        return result
 
                 # Changing game nickname - 'unconfirming' user
                 if user.game_id != game_user_id:
@@ -363,7 +372,7 @@ class EloBot(DiscordBot):
                                         'подверди свой ник командой `!confirm`. ' \
                                         'А пока что будешь с таким рангом :3'.format(mention, required_hash)
                         yield from self.message(channel, confirm_reply)
-            rank_probably_changed = rank != old_rank
+            rank_changed = rank != old_rank
 
             # Saving user to database
             self.users.update_user(user, game_user_id, nickname, rank)
@@ -371,7 +380,7 @@ class EloBot(DiscordBot):
             # Updating users role on server
             roles_manager = RolesManager(channel.server.roles)
             role_success, new_role, roles_changed = yield from roles_manager.set_user_role(self.client, member, rank)
-            rank_probably_changed = rank_probably_changed or roles_changed
+            result.rank = rank_changed or roles_changed
 
             # Updating user nickname
             nick_manager = NicknamesManager(self.users)
@@ -379,23 +388,32 @@ class EloBot(DiscordBot):
             nick_success = True
             if new_name:
                 nick_success, has_new_nickname = yield from self.change_member_nickname(member, new_name)
+                result.name = has_new_nickname
 
             # Replying
-            if not silent and (is_new_data or rank_probably_changed):
+            if not silent and (is_new_data or result.rank):
                 if role_success:
                     emojis = self.emoji.s(channel.server)
                     if is_new_data:
                         answer = Answers.generate_answer(member, new_role.name, emojis)
                     else:
+                        # Replace rank text with emojis
                         rank_old_text = emojis.get(old_rank)
                         if not rank_old_text:
                             rank_old_text = old_rank
                         rank_new_text = emojis.get(rank)
                         if not rank_new_text:
                             rank_new_text = rank
-                        answer = '{0}, твое эло изменилось {1} -> {2}.'\
-                            .format(member.mention, rank_old_text, rank_new_text)
-                    yield from self.message(channel, answer)
+
+                        # Form a reply
+                        if rank_changed:
+                            answer = '{0}, твое эло изменилось {1} -> {2}.'\
+                                .format(member.mention, rank_old_text, rank_new_text)
+                        else:
+                            answer = 'Эй {0}, вернулся к нам на каланл? Выставил тебе твой ранк {1}'\
+                                .format(member.mention, rank_new_text)
+                    if answer:
+                        yield from self.message(channel, answer)
                 else:
                     yield from self.message(channel,
                                             'Эй, {0}, у меня недостаточно прав чтобы выставить твою роль, '
@@ -429,22 +447,18 @@ class EloBot(DiscordBot):
                     yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
                                                         'а АПИ лежит...'.format(channel.server, member, user.nickname))
 
-        except RiotAPI.UnknownHTTPException as _:
+        except RiotAPI.RiotRequestException as e:
+            result.api_error = e.error_code
             if not silent and is_new_data:
                 error_reply = '{0}, произошла ошибка при запросе к RiotAPI, попробуй попозже.'.format(member.mention)
                 yield from self.message(channel, error_reply)
 
-        except RiotAPI.RiotRequestException as e:
-            self.message(channel, '{0}, почему-то не получилось получить твой ранг, попробуй еще раз... {1}'
-                         .format(member.mention, e))
-
         except RolesManager.RoleNotFoundException as _:
-            if silent or not is_new_data:
-                return rank_probably_changed, has_new_nickname
-            yield from self.message(channel,
-                                    'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
-                                    'Скажи админу чтобы добавил роль `{1}`'.format(mention, rank))
-        return rank_probably_changed, has_new_nickname
+            if not silent and is_new_data:
+                yield from self.message(channel,
+                                        'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
+                                        'Скажи админу чтобы добавил роль `{1}`'.format(mention, rank))
+        return result
 
     @asyncio.coroutine
     def change_lol_nickname(self, member, nickname, channel):
@@ -702,8 +716,8 @@ class EloBot(DiscordBot):
             self.riot_api.get_summoner_data(self.api_check_data['region'], nickname=self.api_check_data['name'])
             self.api_is_working = True
             self.logger.info('Riot API is working properly.')
-        except RiotAPI.RiotRequestException as _:
-            self.logger.warning('Checking RiotAPI failed - api is not working')
+        except RiotAPI.RiotRequestException as e:
+            self.logger.warning('Checking RiotAPI failed - api is not working, error: {0}'.format(e.error_code))
         return self.api_is_working
 
 

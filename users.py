@@ -11,9 +11,10 @@ class Users:
 
     salt = 'some_salt'
     file_name = 'users.json'
-    save_period = 300
+    save_period = 60
 
     def __init__(self, data_folder):
+        self.is_dirty = False
         self.last_save_time = 0
         self.data = ServersData([])
         self.full_path = os.path.join(data_folder, Users.file_name)
@@ -34,7 +35,12 @@ class Users:
         except IOError as e:
             self.logger.warning('Couldn\'t open users file, nothing loaded, error: \'%s\'', e)
 
-    def save_users(self):
+    def save_users(self, check_if_dirty=False):
+        if check_if_dirty:
+            if not self.is_dirty:
+                return
+
+        self.is_dirty = True
         current_time = time.time()
         if current_time - self.last_save_time > self.save_period:
             self.logger.info('Saving users data to file \'%s\'', self.full_path)
@@ -43,6 +49,7 @@ class Users:
             file_contents = jsonpickle.encode(self.data)
             f.write(file_contents)
             f.close()
+            self.is_dirty = False
 
     def get_user(self, member):
         server = self.data.get_or_create_server(member.server.id)

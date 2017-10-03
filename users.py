@@ -11,7 +11,7 @@ class Users:
 
     salt = 'some_salt'
     file_name = 'users.json'
-    save_period = 60
+    save_period = 120
 
     def __init__(self, data_folder):
         self.is_dirty = False

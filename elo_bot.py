@@ -29,7 +29,7 @@ class EloBot(DiscordBot):
     confirmation_ranks = ['diamond', 'master', 'challenger']
     rollback_rank = 'bronze'
 
-    initial_sleep_pause = 20    # Before starting autoupdate
+    initial_sleep_pause = 3    # Before starting autoupdate
     success_sleep_pause = 4     # After successful update (for Discord limits)
     small_sleep_pause = 1       # After check without update (for RiotAPI limits)
     long_sleep_pause = 300      # If over-limited RiotAPI
@@ -158,7 +158,7 @@ class EloBot(DiscordBot):
         self.logger.info('Autoupdating using MEMBERS data - completed')
 
     @asyncio.coroutine
-    def autoupdate_user(self, server_data, user):
+    def autoupdate_user(self, server_data, user, force_silent=False):
         server = self.client.get_server(server_data.server_id)
         if not server:
             return False
@@ -167,14 +167,14 @@ class EloBot(DiscordBot):
             return False
         channel = next((x for x in server.channels if x.name == 'bots' or x.name == 'bot'), server.default_channel)
         result = yield from self.update_user(
-            member, user, channel, check_is_conflicted=True, silent=False, is_new_data=False)
+            member, user, channel, check_is_conflicted=True, silent=force_silent, is_new_data=False)
         if result.api_error:
             self.logger.error('Autoupdate request riot API error: %s', result.api_error)
             yield from asyncio.sleep(self.long_sleep_pause)
 
         # Periodic extra save call in case we have changes
         self.users.save_users(check_if_dirty=True)
-        
+
         return result.rank or result.name
 
     @asyncio.coroutine
@@ -227,23 +227,42 @@ class EloBot(DiscordBot):
             self.logger.info('User \'%s\' joined to the server \'%s\'', member.name, member.server)
             server = member.server
 
+            server_data = self.users.get_or_create_server(server.id)
+            user_data = server_data.get_user(member.id)
+            success = False
+            if user_data:
+                success = yield from self.autoupdate_user(server_data, user_data, force_silent=True)
             # Force user to have default gray role
-            try:
-                roles_manager = RolesManager(server.roles)
-                role_results = yield from roles_manager.set_user_initial_role(self.client, member)
-                success = role_results[0]
-                if not success:
-                    self.logger.error('Cant set initial role for user \'%s\' (forbidden)', member)
-            except RolesManager.RoleNotFoundException as e:
-                self.logger.error('Joined user will have default role (no-elo role was not found)')
 
-            fmt = 'Привет {0.mention}! {1} Чтобы установить свое эло и игровой ник, напиши {2}. ' + \
-                  'Так людям будет проще тебя найти, да и ник не будет таким серым (как твоя жизнь{3}). ' \
-                  'Так же есть `!base` для установки первой части ника, и вообще смотри в `!help`'
-            em = self.emoji.s(server)
-            text = fmt.format(member, em.poro, self.get_basic_hint(server.id), em.kappa)
-            yield from self.message(server, text)
+            if success:
+                emojis = self.emoji.s(server)
+                rank_text = emojis.get(user_data.rank)
+                if not rank_text:
+                    rank_text = user_data.rank
+                msg = 'Привет {0.mention}! Опять ты выходишь на связь? Поставил тебе {1}'.format(member, rank_text)
+                yield from self.message(member.server, msg)
+            else:
+                yield from self.welcome_default(member)
         return on_member_join
+
+    @asyncio.coroutine
+    def welcome_default(self, member):
+        server = member.server
+        try:
+            roles_manager = RolesManager(server.roles)
+            role_results = yield from roles_manager.set_user_initial_role(self.client, member)
+            success = role_results[0]
+            if not success:
+                self.logger.error('Cant set initial role for user \'%s\' (forbidden)', member)
+        except RolesManager.RoleNotFoundException as e:
+            self.logger.error('Joined user will have default role (no-elo role was not found)')
+
+        fmt = 'Привет {0.mention}! {1} Чтобы установить свое эло и игровой ник, напиши {2}. ' + \
+              'Так людям будет проще тебя найти, да и ник не будет таким серым (как твоя жизнь{3}). ' \
+              'Так же есть `!base` для установки первой части ника, и вообще смотри в `!help`'
+        em = self.emoji.s(server)
+        text = fmt.format(member, em.poro, self.get_basic_hint(server.id), em.kappa)
+        yield from self.message(server, text)
 
     @DiscordBot.owner_action('<new RiotAPI key>')
     @asyncio.coroutine
@@ -410,7 +429,7 @@ class EloBot(DiscordBot):
                             answer = '{0}, твое эло изменилось {1} -> {2}.'\
                                 .format(member.mention, rank_old_text, rank_new_text)
                         else:
-                            answer = 'Эй {0}, вернулся к нам на каланл? Выставил тебе твой ранк {1}'\
+                            answer = 'Эй {0}, вернулся к нам на канал? Выставил тебе твой ранк {1}'\
                                 .format(member.mention, rank_new_text)
                     if answer:
                         yield from self.message(channel, answer)

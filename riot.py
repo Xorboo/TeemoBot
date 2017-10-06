@@ -141,7 +141,7 @@ class RiotAPI:
             if error_code == 404:
                 raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
             else:
-                raise RiotAPI.RiotRequestException('Unknown request response error: {0}'.format(error_code))
+                raise RiotAPI.RiotRequestException('Unknown request response error: {0}'.format(error_code), error_code)
 
         user_data_json = json.loads(user_content)
         return user_data_json['id'], user_data_json['name'].strip()

@@ -149,6 +149,7 @@ class EloBot(DiscordBot):
                 else:
                     user_cleared = yield from self.clear_name_and_elo(member, server)
                     if user_cleared:
+                        self.logger.info('Cleared data for user %s', member)
                         yield from self.message(channel, '{0}, тебя не было в базе, обнулил твои данные. '
                                                 'Повтори `!nick` для возвращения эло.'.format(member.mention))
                         yield from asyncio.sleep(self.success_sleep_pause)
@@ -337,8 +338,8 @@ class EloBot(DiscordBot):
     def change_member_nickname(self, member, new_name):
         if new_name != member.display_name:
             try:
-                self.logger.info('Setting nickname: \'{0}\' for \'{1}\''
-                                 .format(new_name, member).encode('utf-8'))
+                self.logger.info('Changing nickname from \'{0}\' to \'{1}\' for \'{2}\''
+                                 .format(member.display_name, new_name, member).encode('utf-8'))
                 yield from self.client.change_nickname(member, new_name)
                 return True, True
             except discord.errors.Forbidden as e:

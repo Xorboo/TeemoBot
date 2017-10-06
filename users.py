@@ -43,7 +43,7 @@ class Users:
         self.is_dirty = True
         current_time = time.time()
         if current_time - self.last_save_time > self.save_period:
-            self.logger.info('Saving users data to file \'%s\'', self.full_path)
+            self.logger.debug('Saving users data to file \'%s\'', self.full_path)
             self.last_save_time = current_time
             f = open(self.full_path, 'w')
             file_contents = jsonpickle.encode(self.data)

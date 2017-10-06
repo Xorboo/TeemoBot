@@ -29,7 +29,7 @@ class RolesManager:
         role = self.get_role(role_name)
         new_roles = self.get_new_user_roles(member.roles, role)
 
-        has_new_roles = RolesManager.roles_different(member.roles, new_roles)
+        has_new_roles = self.roles_different(member.roles, new_roles)
         try:
             if has_new_roles:
                 self.logger.info('Setting role \'%s\' for \'%s\'', role_name, member)
@@ -39,15 +39,23 @@ class RolesManager:
             self.logger.error('Error setting role: %s', e)
         return False, role, has_new_roles
 
-    @staticmethod
-    def roles_different(old_roles, new_roles):
+    def roles_different(self, old_roles, new_roles):
+        added_roles = []
         for r in new_roles:
             if r not in old_roles:
-                return True
+                added_roles.append(r)
+
+        removed_roles = []
         for r in old_roles:
             if r not in new_roles:
-                return True
-        return False
+                removed_roles.append(r)
+
+        has_changed_roles = added_roles or removed_roles
+        if has_changed_roles:
+            self.logger.info('Changed roles, added: [{0}], removed: [{1}]'
+                             .format(', '.join([x.name for x in added_roles]),
+                                     ', '.join([x.name for x in removed_roles])))
+        return has_changed_roles
 
     def has_any_role(self, member):
         for role in member.roles:

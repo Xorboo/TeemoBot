@@ -11,7 +11,7 @@ class Users:
 
     salt = 'some_salt'
     file_name = 'users.json'
-    save_period = 120
+    save_period = 60
 
     def __init__(self, data_folder):
         self.is_dirty = False
@@ -60,6 +60,13 @@ class Users:
         server.remove_user(member.id)
         self.save_users()
 
+    def clear_user(self, member):
+        user = self.get_user(member)
+        if user:
+            user.clear()
+            self.save_users()
+        return user
+
     def get_or_create_user(self, member):
         server = self.data.get_or_create_server(member.server.id)
         return server.get_or_create_user(member.id)
@@ -72,9 +79,9 @@ class Users:
 
     def confirm_user(self, user, server):
         user.confirmed = True
-        unconfirmed_users = server.remove_unconfirmed_users(user)
+        conflicted_users = server.clear_unconfirmed_users(user)
         self.save_users()
-        return unconfirmed_users
+        return conflicted_users
 
     def get_or_create_server(self, server_id):
         return self.data.get_or_create_server(server_id)
@@ -173,12 +180,10 @@ class ServerData(object):
                 return u
         return None
 
-    def remove_unconfirmed_users(self, user):
-        user_discord_ids = []
-        new_users_list = []
+    def clear_unconfirmed_users(self, user):
+        unconfirmed_users = []
 
         for u in self.users:
-            have_to_delete = False
             if u != user:
                 if u.game_id:
                     if u.game_id == user.game_id:
@@ -187,13 +192,10 @@ class ServerData(object):
                     have_to_delete = True
 
             if have_to_delete:
-                user_discord_ids.append(u.discord_id)
-            else:
-                new_users_list.append(u)
+                u.clear()
+                unconfirmed_users.append(u)
 
-        # Thats so un-optimal, i can't even...
-        self.users = new_users_list
-        return user_discord_ids
+        return unconfirmed_users
 
     @property
     def total_users(self):
@@ -201,19 +203,30 @@ class ServerData(object):
 
 
 class UserData(object):
-    def __init__(self, discord_id, rank='', game_id='', nickname='', confirmed=False):
+    def __init__(self, discord_id, rank='', game_id='', nickname='', confirmed=False, cancer=False):
         # Users.logger.info('Creating user \'%s\' with nickname \'%s\'', discord_id, nickname)
         self.discord_id = discord_id
         self.rank = rank
         self.game_id = game_id
         self.nickname = nickname
         self.confirmed = confirmed
+        self.cancer = cancer
+
+    def clear(self):
+        self.nickname = ''
+        self.game_id = ''
 
     @property
     def is_confirmed(self):
         if not hasattr(self, 'confirmed'):
             self.confirmed = False
         return self.confirmed
+
+    @property
+    def is_cancer(self):
+        if not hasattr(self, 'cancer'):
+            self.cancer = False
+        return self.cancer
 
     @property
     def bind_hash(self):

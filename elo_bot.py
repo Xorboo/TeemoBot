@@ -114,15 +114,25 @@ class EloBot(DiscordBot):
             server_data = self.users.data.get_server_by_index(server_index)
             user_index = 0
             while user_index < server_data.total_users:
-                user_data = server_data.get_user_by_index(user_index)
-                success = False
                 try:
-                    success = yield from self.autoupdate_user(server_data, user_data)
+                    user_data = server_data.get_user_by_index(user_index)
+                    success = False
+                    if user_data.has_data:
+                        success = yield from self.autoupdate_user(server_data, user_data)
+                    else:
+                        server, member = self.find_member_by_id(server_data.server_id, user_data.discord_id)
+                        success = yield from self.clear_user_data(member, server)
+                        if success:
+                            channel = EloBot.get_bots_channel(server)
+                            yield from self.message(channel, '{0}, тебя не было в базе, обнулил твои данные. '
+                                                    'Повтори `!nick` для возвращения эло.'.format(member.mention))
+                            yield from asyncio.sleep(self.success_sleep_pause)
+                    if success:
+                        yield from asyncio.sleep(self.success_sleep_pause)
+                    yield from asyncio.sleep(self.small_sleep_pause)
+
                 except Exception:
                     self.logger.error('Autoupdate user_data exception: {0}'.format(traceback.format_exc()))
-                if success:
-                    yield from asyncio.sleep(self.success_sleep_pause)
-                yield from asyncio.sleep(self.small_sleep_pause)
                 user_index += 1
             server_index += 1
         self.logger.info('Autoupdating using USERS data - completed')
@@ -142,14 +152,13 @@ class EloBot(DiscordBot):
             while member_index < len(server.members):
                 member = list(server.members)[member_index]
                 user_data = server_data.get_user(member.id)
-                if user_data:
+                if user_data and user_data.has_data:
                     success = yield from self.autoupdate_user(server_data, user_data)
                     if success:
                         yield from asyncio.sleep(self.success_sleep_pause)
                 else:
-                    user_cleared = yield from self.clear_name_and_elo(member, server)
+                    user_cleared = yield from self.clear_user_data(member, server)
                     if user_cleared:
-                        self.logger.info('Cleared data for user %s', member)
                         yield from self.message(channel, '{0}, тебя не было в базе, обнулил твои данные. '
                                                 'Повтори `!nick` для возвращения эло.'.format(member.mention))
                         yield from asyncio.sleep(self.success_sleep_pause)
@@ -163,10 +172,11 @@ class EloBot(DiscordBot):
         server = self.client.get_server(server_data.server_id)
         if not server:
             return False
-        member = server.get_member(user.discord_id)
-        if not member:
+        server, member = self.find_member_by_id(server_data.server_id, user.discord_id)
+        if not server or not member:
             return False
-        channel = next((x for x in server.channels if x.name == 'bots' or x.name == 'bot'), server.default_channel)
+
+        channel = EloBot.get_bots_channel(server)
         result = yield from self.update_user(
             member, user, channel, check_is_conflicted=True, silent=force_silent, is_new_data=False)
         if result.api_error:
@@ -177,6 +187,16 @@ class EloBot(DiscordBot):
         self.users.save_users(check_if_dirty=True)
 
         return result.rank or result.name
+
+    @staticmethod
+    def get_bots_channel(server):
+        return next((x for x in server.channels if x.name == 'bots' or x.name == 'bot'), server.default_channel)
+
+    def find_member_by_id(self, server_id, user_discord_id):
+        server = self.client.get_server(server_id)
+        if not server:
+            return None, None
+        return server, server.get_member(user_discord_id)
 
     @asyncio.coroutine
     def check_no_elo_members(self, s):
@@ -404,7 +424,7 @@ class EloBot(DiscordBot):
 
             # Updating user nickname
             nick_manager = NicknamesManager(self.users)
-            new_name = nick_manager.get_combined_nickname(member)
+            new_name = nick_manager.get_combined_nickname(member, user)
             nick_success = True
             if new_name:
                 nick_success, has_new_nickname = yield from self.change_member_nickname(member, new_name)
@@ -548,6 +568,60 @@ class EloBot(DiscordBot):
                          .format(nickname, user, mobj.author).encode('utf-8'))
         yield from self.change_lol_nickname(user, nickname, mobj.channel)
 
+    @DiscordBot.admin_action('<@упоминание> <Ник_в_игре>')
+    @asyncio.coroutine
+    def cancer(self, _, mobj):
+        """
+        Добавить 🦀 к нику игрока.
+        Например '!cancer @RagingFlamer'
+        """
+        if mobj.channel.is_private:
+            self.logger.info('User \'{0}\' sent private message \'{1}\''
+                             .format(mobj.author.name, mobj.content).encode('utf-8'))
+            yield from self.message(mobj.channel, self.private_message_error)
+            return
+        if not mobj.mentions:
+            yield from self.message(mobj.channel, 'Укажи @рака.')
+            return
+
+        member = mobj.mentions[0]
+        cancer_changed = yield from self.change_user_cancer(member, mobj.channel, True)
+        if cancer_changed:
+            yield from self.message(mobj.channel, 'Лол, {0}, ну ты и рак все же.'.format(member.mention))
+
+    @DiscordBot.admin_action('<@упоминание> <Ник_в_игре>')
+    @asyncio.coroutine
+    def decancer(self, _, mobj):
+        """
+        Убрать 🦀 от нику игрока.
+        Например '!decancer @NotRagingFlamer'
+        """
+        if mobj.channel.is_private:
+            self.logger.info('User \'{0}\' sent private message \'{1}\''
+                             .format(mobj.author.name, mobj.content).encode('utf-8'))
+            yield from self.message(mobj.channel, self.private_message_error)
+            return
+        if not mobj.mentions:
+            yield from self.message(mobj.channel, 'Укажи @рака.')
+            return
+
+        member = mobj.mentions[0]
+        cancer_changed = yield from self.change_user_cancer(member, mobj.channel, False)
+        if cancer_changed:
+            yield from self.message(mobj.channel, 'Хм, {0}, ну наверное ты больше не рак.'.format(member.mention))
+
+    @asyncio.coroutine
+    def change_user_cancer(self, member, channel, cancer):
+        user_data = self.users.get_or_create_user(member)
+        was_cancer = user_data.is_cancer
+        user_data.cancer = cancer
+        if user_data.has_data:
+            yield from self.update_user(
+                member, user_data, channel, check_is_conflicted=False, silent=True, is_new_data=False)
+        else:
+            yield from self.clear_user_data(member, channel.server)
+        return was_cancer != cancer
+
     @DiscordBot.action('<Базовый_Ник>')
     @asyncio.coroutine
     def base(self, args, mobj):
@@ -560,7 +634,9 @@ class EloBot(DiscordBot):
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
-        base_name = NicknamesManager.clean_name(' '.join(args))
+        user_data = self.users.get_user(mobj.author)
+        is_cancer = user_data and user_data.is_cancer
+        base_name = NicknamesManager.create_base_name(' '.join(args), is_cancer)
         self.logger.info('Setting base name \'{0}\' for \'{1}\''.format(base_name, mobj.author).encode('utf-8'))
 
         nick_manager = NicknamesManager(self.users)
@@ -620,13 +696,13 @@ class EloBot(DiscordBot):
 
         has_required_page = self.riot_api.check_user_runepage(user_data.game_id, bind_hash, region)
         if has_required_page:
-            conflicted_user_ids = self.users.confirm_user(user_data, server)
+            conflicted_users = self.users.confirm_user(user_data, server)
             yield from self.update_user(mobj.author, user_data, mobj.channel, check_is_conflicted=False, silent=True)
 
             success_reply = 'Окей {0}, подтвердил твой игровой ник `{1}`'\
                 .format(mobj.author.mention, user_data.nickname)
             yield from self.message(mobj.channel, success_reply)
-            yield from self.remove_conflicted_members(conflicted_user_ids, mobj.channel)
+            yield from self.remove_conflicted_members(conflicted_users, mobj.channel)
         else:
             fail_reply = '{0}, поменяй имя одной из страниц рун на `{1}` для подтверждения, ' \
                          'подожди минуту и повтори команду.'.format(mobj.author.mention, bind_hash)
@@ -647,32 +723,36 @@ class EloBot(DiscordBot):
 
     @asyncio.coroutine
     def clear_user_data(self, member, server):
-        self.users.remove_user(member)
-        yield from self.clear_name_and_elo(member, server)
+        user_data = self.users.clear_user(member)
+        user_cleared = yield from self.clear_name_and_elo(member, server, user_data)
+        if user_cleared:
+            self.logger.info('Cleared data for user %s', member)
+        return user_cleared
 
     @asyncio.coroutine
-    def remove_conflicted_members(self, member_ids, reply_channel):
+    def remove_conflicted_members(self, conflicted_users, reply_channel):
         conflicted_members = []
-        for member_id in member_ids:
+        for user in conflicted_users:
+            member_id = user.discord_id
             conflicted_member = reply_channel.server.get_member(member_id)
             if conflicted_member:
                 conflicted_members.append(conflicted_member)
+                yield from self.clear_name_and_elo(conflicted_member, reply_channel.server, user)
+
         if conflicted_members:
-            for member in conflicted_members:
-                yield from self.clear_name_and_elo(member, reply_channel.server)
             members_mentions = ', '.join([x.mention for x in conflicted_members])
             conflict_reply = '{0}: очистил эло, зачем чужие ники юзать, а?'.format(members_mentions)
             yield from self.message(reply_channel, conflict_reply)
 
     @asyncio.coroutine
-    def clear_name_and_elo(self, member, server):
+    def clear_name_and_elo(self, member, server, user_data=None):
         roles_manager = RolesManager(server.roles)
         role_results = yield from roles_manager.set_user_initial_role(self.client, member)
         has_new_roles = role_results[2]
 
-        clean_name = NicknamesManager.get_base_name(member)
+        clean_name = NicknamesManager.get_base_name(member, user_data)
         nick_success, has_new_nickname = yield from self.change_member_nickname(member, clean_name)
-        return has_new_roles or has_new_nickname
+        return has_new_roles or (nick_success and has_new_nickname)
 
     @DiscordBot.action()
     @asyncio.coroutine
@@ -745,12 +825,12 @@ class NicknamesManager:
     def __init__(self, users_storage):
         self.users = users_storage
 
-    def get_combined_nickname(self, member):
+    def get_combined_nickname(self, member, user_data):
         ingame_nickname = self.get_ingame_nickname(member)
         if not ingame_nickname:
             return None
 
-        base_name = NicknamesManager.get_base_name(member)
+        base_name = NicknamesManager.get_base_name(member, user_data)
         full_name = NicknamesManager.create_full_name(base_name, ingame_nickname)
         return full_name
 
@@ -761,17 +841,33 @@ class NicknamesManager:
         return None
 
     @staticmethod
-    def get_base_name(member):
-        return NicknamesManager.clean_name(member.display_name)
+    def get_base_name(member, user_data):
+        base_name = NicknamesManager._clean_name(member.display_name)
+        if user_data and user_data.is_cancer:
+            base_name = NicknamesManager._add_cancer(base_name)
+        return base_name
 
     @staticmethod
-    def clean_name(name):
+    def create_base_name(name_to_clean, is_cancer):
+        clean_name = NicknamesManager._clean_name(name_to_clean)
+        if is_cancer:
+            clean_name = NicknamesManager._add_cancer(clean_name)
+        return clean_name
+
+    @staticmethod
+    def _clean_name(name):
         br_open = name.rfind('(')
         br_close = name.rfind(')')
         br_first = min(br_open, br_close)
         if br_first >= 0:
             return (name[:br_first]).strip()
         return name.strip()
+
+    @staticmethod
+    def _add_cancer(name):
+        if not name.startswith('🦀'):
+            name = '🦀 ' + name
+        return name
 
     @staticmethod
     def create_full_name(base, nick):

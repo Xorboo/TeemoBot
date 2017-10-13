@@ -4,5 +4,7 @@
 	"discord": {
 		"token": "%YOUR_DISCORD_BOT_TOKEN%",
 		"owner_id": "%YOUR_ID_FOR_SPECIAL_COMMANDS%"
-	}
+	},
+	"autoupdate_elo": true,
+	"autoupdate_verbose": true
 }

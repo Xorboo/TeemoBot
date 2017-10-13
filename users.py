@@ -184,6 +184,7 @@ class ServerData(object):
         unconfirmed_users = []
 
         for u in self.users:
+            have_to_delete = False
             if u != user:
                 if u.game_id:
                     if u.game_id == user.game_id:

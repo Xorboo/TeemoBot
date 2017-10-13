@@ -38,13 +38,19 @@ class EloBot(DiscordBot):
         self.parameters_file_path = os.path.join(data_folder, EloBot.parameters_file_name)
         with open(self.parameters_file_path) as parameters_file:
             self.parameters_data = json.load(parameters_file)
-        self.logger.info('Loaded parameters file from \'%s\'', self.save_parameters())
+        self.logger.info('Loaded parameters file from \'%s\'', self.parameters_file_path)
 
         super(EloBot, self).__init__(self.parameters_data['discord'])
         self.riot_api = RiotAPI(self.parameters_data['riot_api_key'])
         Users.salt = self.parameters_data['salt']
         self.users = Users(data_folder)
         self.emoji = Emojis()
+
+        self.autoupdate_is_running = False
+        self.autoupdate_elo = \
+            self.parameters_data['autoupdate_elo'] if 'autoupdate_elo' in self.parameters_data else False
+        self.autoupdate_verbose = \
+            self.parameters_data['autoupdate_verbose'] if 'autoupdate_verbose' in self.parameters_data else True
 
         self.last_api_check_time = 0
         self.api_is_working = True
@@ -69,7 +75,12 @@ class EloBot(DiscordBot):
         self.client.event(self.server_remove())
         self.client.event(self.event_join())
 
-        self.client.loop.create_task(self.autoupdate_users_data())
+        self.launch_autoupdate_task()
+
+    def launch_autoupdate_task(self):
+        if self.autoupdate_elo and not self.autoupdate_is_running:
+            self.logger.info('Launching autoupdate')
+            self.client.loop.create_task(self.autoupdate_users_data())
 
     def event_ready(self):
         @asyncio.coroutine
@@ -88,12 +99,19 @@ class EloBot(DiscordBot):
             self.logger.info('Finished \'on_ready()\'')
         return on_ready
 
+    @property
+    def should_run_autoupdate(self):
+        return not self.client.is_closed and self.autoupdate_elo
+
     @asyncio.coroutine
     def autoupdate_users_data(self):
+        self.logger.info('Autoupdate START')
+        self.autoupdate_is_running = True
+
         yield from self.client.wait_until_ready()
         yield from asyncio.sleep(self.initial_sleep_pause)
 
-        while not self.client.is_closed:
+        while self.should_run_autoupdate:
             try:
                 yield from self.autoupdate_from_users()
                 yield from asyncio.sleep(self.success_sleep_pause)
@@ -102,6 +120,9 @@ class EloBot(DiscordBot):
             except Exception:
                 self.logger.error('Autoupdate loop exception: {0}'.format(traceback.format_exc()))
                 yield from asyncio.sleep(self.success_sleep_pause)
+
+        self.autoupdate_is_running = False
+        self.logger.info('Autoupdate STOP')
 
     @asyncio.coroutine
     def autoupdate_from_users(self):
@@ -114,9 +135,11 @@ class EloBot(DiscordBot):
             server_data = self.users.data.get_server_by_index(server_index)
             user_index = 0
             while user_index < server_data.total_users:
+                if not self.should_run_autoupdate:
+                    return
+
                 try:
                     user_data = server_data.get_user_by_index(user_index)
-                    success = False
                     if user_data.has_data:
                         success = yield from self.autoupdate_user(server_data, user_data)
                     else:
@@ -150,6 +173,9 @@ class EloBot(DiscordBot):
             channel = next((x for x in server.channels if x.name == 'bots' or x.name == 'bot'), server.default_channel)
             member_index = 0
             while member_index < len(server.members):
+                if not self.should_run_autoupdate:
+                    return
+
                 member = list(server.members)[member_index]
                 user_data = server_data.get_user(member.id)
                 if user_data and user_data.has_data:
@@ -176,9 +202,10 @@ class EloBot(DiscordBot):
         if not server or not member:
             return False
 
+        is_silent = force_silent or not self.autoupdate_verbose
         channel = EloBot.get_bots_channel(server)
         result = yield from self.update_user(
-            member, user, channel, check_is_conflicted=True, silent=force_silent, is_new_data=False)
+            member, user, channel, check_is_conflicted=True, silent=is_silent, is_new_data=False)
         if result.api_error:
             self.logger.error('Autoupdate request riot API error: %s', result.api_error)
             yield from asyncio.sleep(self.long_sleep_pause)
@@ -302,6 +329,37 @@ class EloBot(DiscordBot):
             yield from self.message(mobj.channel, 'Удали свое сообщение с ключом, на всякий случай.')
         else:
             yield from self.client.delete_message(mobj)
+
+    @DiscordBot.owner_action('')
+    @asyncio.coroutine
+    def autoupdate(self, _, mobj):
+        """
+        Включить/Выключить автообновление эло у игроков
+        """
+        self.autoupdate_elo = not self.autoupdate_elo
+        self.logger.info('Changing autoupdate to [{0}] by user: {1}'.format(self.autoupdate_elo, mobj.author))
+        self.parameters_data['autoupdate_elo'] = self.autoupdate_elo
+        self.save_parameters()
+        self.launch_autoupdate_task()
+
+        yield from self.message(mobj.channel, 'Окей {0}, автообновление теперь `{1}`'
+                                .format(mobj.author.mention, 'Включено' if self.autoupdate_elo else 'Выключено'))
+
+    @DiscordBot.owner_action('')
+    @asyncio.coroutine
+    def autoupdate_verbose(self, _, mobj):
+        """
+        Включить/Выключить сообщения в чат при автообновлении эло
+        """
+        self.autoupdate_verbose = not self.autoupdate_verbose
+        self.logger.info('Changing autoupdate verbose to [{0}] by user: {1}'
+                         .format(self.autoupdate_verbose, mobj.author))
+        self.parameters_data['autoupdate_verbose'] = self.autoupdate_verbose
+        self.save_parameters()
+        self.launch_autoupdate_task()
+
+        yield from self.message(mobj.channel, 'Окей {0}, сообщения при автообновлении теперь `{1}`'
+                                .format(mobj.author.mention, 'Включены' if self.autoupdate_verbose else 'Выключены'))
 
     @DiscordBot.action('<Команда>')
     @asyncio.coroutine

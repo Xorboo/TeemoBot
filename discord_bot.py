@@ -192,7 +192,8 @@ class DiscordBot:
                 return
 
             # Call all message listeners
-            [msg_listener(self, msg) for msg_listener in DiscordBot.MESSAGE_LISTENERS]
+            for listener in self.MESSAGE_LISTENERS:
+                yield from listener(self, msg)
 
             # Parse the message for special commands
             args = msg.content.strip().split(' ')

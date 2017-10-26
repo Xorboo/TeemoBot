@@ -6,12 +6,14 @@ import logging
 import discord
 import json
 import types
+import re
 from discord_bot import DiscordBot
 from riot import RiotAPI
 from users import Users, UserData
 from answers import Answers
 from emojis import Emojis
 from roles_manager import RolesManager
+from nicknames_manager import NicknamesManager
 
 
 class EloBot(DiscordBot):
@@ -33,6 +35,12 @@ class EloBot(DiscordBot):
     success_sleep_pause = 4     # After successful update (for Discord limits)
     small_sleep_pause = 1       # After check without update (for RiotAPI limits)
     long_sleep_pause = 300      # If over-limited RiotAPI
+
+    restricted_urls = [
+        'riotworlds.com',
+        'steam-halloween.com',
+        'playstation-special.com'
+    ]
 
     def __init__(self, data_folder):
         self.parameters_file_path = os.path.join(data_folder, EloBot.parameters_file_name)
@@ -409,8 +417,36 @@ class EloBot(DiscordBot):
         return self.pre_text(output)
 
     @DiscordBot.message_listener()
+    @asyncio.coroutine
     def on_message(self, mobj):
-        pass
+        URL_REGEX = r"""(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))"""
+        urls = re.findall(URL_REGEX, mobj.content)
+        if urls:
+            if RolesManager.has_no_role(mobj.author):
+                self.logger.info('Deleting spam: no-role user \'%s\' posted a url \'%s\'', mobj.author, ', '.join(urls))
+                yield from self.delete_spam_message(mobj, False)
+            else:
+                has_restricted_url = False
+                for url in urls:
+                    url = url.lower()
+                    for restricted in self.restricted_urls:
+                        if restricted in url:
+                            has_restricted_url = True
+                            break
+                    if has_restricted_url:
+                        break
+                if has_restricted_url:
+                    self.logger.info('Deleting spam: user \'%s\' posted a url \'%s\'', mobj.author, ', '.join(urls))
+                    yield from self.delete_spam_message(mobj, True)
+
+    @asyncio.coroutine
+    def delete_spam_message(self, mobj, add_reply):
+        yield from self.client.delete_message(mobj)
+        if add_reply:
+            reply = 'Ну что же ты, {0}, спамишь всякими фишинговыми линками? ' \
+                    'Смотри, забанят за такое чего доброго...'.format(mobj.author.mention)
+            yield from self.message(mobj.channel, reply)
+        yield from self.set_cancer(mobj.author, mobj.channel, True, add_reply)
 
     @asyncio.coroutine
     def change_member_nickname(self, member, new_name):
@@ -467,7 +503,7 @@ class EloBot(DiscordBot):
                     if not silent and (is_new_data or rank != old_rank):
                         required_hash = UserData.create_hash(game_user_id, member.id)
                         confirm_reply = '{0}, если ты правда с хай-эло - переименуй страницу рун на `{1}` и ' \
-                                        'подверди свой ник командой `!confirm`. ' \
+                                        'подтверди свой ник командой `!confirm`. ' \
                                         'А пока что будешь с таким рангом :3'.format(mention, required_hash)
                         yield from self.message(channel, confirm_reply)
             rank_changed = rank != old_rank
@@ -643,9 +679,7 @@ class EloBot(DiscordBot):
             return
 
         member = mobj.mentions[0]
-        cancer_changed = yield from self.change_user_cancer(member, mobj.channel, True)
-        if cancer_changed:
-            yield from self.message(mobj.channel, 'Лол, {0}, ну ты и рак все же.'.format(member.mention))
+        yield from self.set_cancer(member, mobj.channel, True)
 
     @DiscordBot.admin_action('<@упоминание> <Ник_в_игре>')
     @asyncio.coroutine
@@ -664,9 +698,15 @@ class EloBot(DiscordBot):
             return
 
         member = mobj.mentions[0]
-        cancer_changed = yield from self.change_user_cancer(member, mobj.channel, False)
-        if cancer_changed:
-            yield from self.message(mobj.channel, 'Хм, {0}, ну наверное ты больше не рак.'.format(member.mention))
+        yield from self.set_cancer(member, mobj.channel, False)
+
+    @asyncio.coroutine
+    def set_cancer(self, member, channel, is_cancer, add_reply=True):
+        cancer_changed = yield from self.change_user_cancer(member, channel, is_cancer)
+        if cancer_changed and add_reply:
+            reply = 'Лол, {0}, ну ты и рак все же.' if is_cancer else 'Хм, {0}, ну наверное ты больше не рак.'
+            yield from self.message(channel, reply.format(member.mention))
+        return cancer_changed
 
     @asyncio.coroutine
     def change_user_cancer(self, member, channel, cancer):
@@ -877,80 +917,3 @@ class EloBot(DiscordBot):
         except RiotAPI.RiotRequestException as e:
             self.logger.warning('Checking RiotAPI failed - api is not working, error: {0}'.format(e.error_code))
         return self.api_is_working
-
-
-class NicknamesManager:
-    def __init__(self, users_storage):
-        self.users = users_storage
-
-    def get_combined_nickname(self, member, user_data):
-        ingame_nickname = self.get_ingame_nickname(member)
-        if not ingame_nickname:
-            return None
-
-        base_name = NicknamesManager.get_base_name(member, user_data)
-        full_name = NicknamesManager.create_full_name(base_name, ingame_nickname)
-        return full_name
-
-    def get_ingame_nickname(self, member):
-        user = self.users.get_user(member)
-        if user:
-            return user.nickname
-        return None
-
-    @staticmethod
-    def get_base_name(member, user_data):
-        base_name = NicknamesManager._clean_name(member.display_name)
-        if user_data and user_data.is_cancer:
-            base_name = NicknamesManager._add_cancer(base_name)
-        return base_name
-
-    @staticmethod
-    def create_base_name(name_to_clean, is_cancer):
-        clean_name = NicknamesManager._clean_name(name_to_clean)
-        if is_cancer:
-            clean_name = NicknamesManager._add_cancer(clean_name)
-        return clean_name
-
-    @staticmethod
-    def _clean_name(name):
-        br_open = name.rfind('(')
-        br_close = name.rfind(')')
-        br_first = min(br_open, br_close)
-        if br_first >= 0:
-            return (name[:br_first]).strip()
-        return name.strip()
-
-    @staticmethod
-    def _add_cancer(name):
-        if not name.startswith('🦀'):
-            name = '🦀 ' + name
-        return name
-
-    @staticmethod
-    def create_full_name(base, nick):
-        max_len = 32
-        over_text = '...'
-
-        # Trim both names in case they are too long
-        if len(base) > max_len:
-            base = base[:max_len - len(over_text)] + over_text
-        if len(nick) > max_len:
-            nick = nick[:max_len - len(over_text)] + over_text
-
-        if len(base) > 0 and base.lower() != nick.lower():
-            # Combine names if they are not equal
-            total_len = len(base) + len(nick) + len(' ()')
-            if total_len > max_len:
-                # Combined name is too long, trimming base name so it will fit
-                base_overhead = (total_len - max_len) + len(over_text)
-                if len(base) > base_overhead:
-                    # Can still fit some of the base name with '...' after it
-                    base = base[:-base_overhead] + over_text
-                else:
-                    # Can't fit base name at all, returning plain nickname
-                    return nick
-            return '{0} ({1})'.format(base, nick)
-        else:
-            # Names are equal
-            return nick

@@ -499,13 +499,13 @@ class EloBot(DiscordBot):
                 if rank in EloBot.confirmation_ranks:
                     self.logger.debug('User {0} requested {1} using nickname \'{2}\', putting him to {3}'
                                       .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
-                    rank = EloBot.rollback_rank.lower()
+                    # rank = EloBot.rollback_rank.lower()
                     if not silent and (is_new_data or rank != old_rank):
                         # required_hash = UserData.create_hash(game_user_id, member.id)
-                        confirm_reply = 'Сорри, {0}, сейчас из-за рито не работает подтверждение аккаунта, ' \
-                                        'поэтому пока поставлю лоуэло. Как только починият ' \
-                                        '(говорят через пару патчей будет) - сможешь подтвердить ' \
-                                        'свой ник через `!confirm` и будет реальное эло.'.format(mention)
+                        confirm_reply = '{0}, сейчас из-за рито не работает подтверждение аккаунта, ' \
+                                        'Как только починият я включу сброс эло в бронзу с даймонда и выше' \
+                                        'для неподтвержденных аккаунтов. Надо будет подтвердить ' \
+                                        'свой ник через `!confirm` чтобы вернуть реальное эло.'.format(mention)
                         """confirm_reply = '{0}, если ты правда с хай-эло - переименуй страницу рун на `{1}` и ' \
                                         'подтверди свой ник командой `!confirm`. ' \
                                         'А пока что будешь с таким рангом :3'.format(mention, required_hash)"""
@@ -822,8 +822,7 @@ class EloBot(DiscordBot):
             yield from self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
         else:
             yield from self.message(channel, 'Сначала поставь себе ник через `!nick`, {0}'.format(member.mention))
-            
-    '''
+
     @DiscordBot.action('')
     @asyncio.coroutine
     def confirm(self, _, mobj):
@@ -836,6 +835,10 @@ class EloBot(DiscordBot):
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
+        yield from self.message(mobj.channel, '{0}, эта команда пока что не работает. '
+                                              'Рито говорят через пару патчей починят'.format(mobj.author.mention))
+
+        '''
         yield from self.client.send_typing(mobj.channel)
         server = self.users.get_or_create_server(mobj.channel.server.id)
         user_data = server.get_user(mobj.author.id)
@@ -864,7 +867,7 @@ class EloBot(DiscordBot):
             fail_reply = '{0}, поменяй имя одной из страниц рун на `{1}` для подтверждения, ' \
                          'подожди минуту и повтори команду.'.format(mobj.author.mention, bind_hash)
             yield from self.message(mobj.channel, fail_reply)
-    '''
+        '''
 
     @DiscordBot.action('')
     @asyncio.coroutine

@@ -27,7 +27,7 @@ class RiotAPI:
     _base_url = 'https://{0}.api.riotgames.com/'
     _summoner_url = 'lol/summoner/v3/summoners/'
     _league_url = 'lol/league/v3/'
-    _runes_url = 'lol/platform/v3/runes/'
+    _confirm_url = 'lol/platform/v3/third-party-code/by-summoner'
 
     allowed_regions = 'euw | eune | na | ru | kr | br | oce | jp | tr | lan | las'
     _regions = {
@@ -45,6 +45,7 @@ class RiotAPI:
     }
 
     def __init__(self, riot_key):
+        self._api_key = ""
         self.api_key = riot_key
         # self.load_key(data_folder)
 
@@ -75,10 +76,10 @@ class RiotAPI:
             return ''
 
     @staticmethod
-    def runes_url(region):
+    def confirm_url(region):
         if RiotAPI.has_region(region):
             league_region = RiotAPI._regions[region]['league']
-            return RiotAPI._runes_url.format(league_region)
+            return RiotAPI._confirm_url.format(league_region)
         else:
             RiotAPI.logger.error('Requested unknown region for league_url: \'%s\'', region)
             return ''
@@ -116,7 +117,7 @@ class RiotAPI:
         content = None
         try:
             if not self.key_is_valid:
-                self.logger.error('Key is not set, ignoring request \'%s\'', request_url);
+                self.logger.error('Key is not set, ignoring request \'%s\'', request_url)
                 return content
             url = RiotAPI.base_url(region) + request_url + self.riot_key_request
             self.logger.debug('Sending request to: \'%s\'', url)
@@ -172,15 +173,11 @@ class RiotAPI:
                 best_rank_id = rank_id
         return best_rank, real_id, real_name
 
-    def check_user_runepage(self, summoner_id, page_name, region):
-        page_name = page_name.strip()
-        url = '{0}by-summoner/{1}'.format(RiotAPI.runes_url(region), summoner_id)
-        runepages_response, error_code = self.send_request(url, region)
-        runepages = json.loads(runepages_response)['pages']
-        for runepage in runepages:
-            if runepage['name'].strip() == page_name:
-                return True
-        return False
+    def check_user_verification(self, summoner_id, required_code, region):
+        required_code = required_code.strip()
+        url = '{0}/{1}'.format(RiotAPI.confirm_url(region), summoner_id)
+        response, error_code = self.send_request(url, region)
+        return not error_code and response.strip() == required_code
 
     class UserIdNotFoundException(Exception):
         pass

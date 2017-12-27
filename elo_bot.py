@@ -501,14 +501,10 @@ class EloBot(DiscordBot):
                                       .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
                     # rank = EloBot.rollback_rank.lower()
                     if not silent and (is_new_data or rank != old_rank):
-                        # required_hash = UserData.create_hash(game_user_id, member.id)
-                        confirm_reply = '{0}, сейчас из-за рито не работает подтверждение аккаунта, ' \
-                                        'Как только починият я включу сброс эло в бронзу с даймонда и выше' \
-                                        'для неподтвержденных аккаунтов. Надо будет подтвердить ' \
-                                        'свой ник через `!confirm` чтобы вернуть реальное эло.'.format(mention)
-                        """confirm_reply = '{0}, если ты правда с хай-эло - переименуй страницу рун на `{1}` и ' \
-                                        'подтверди свой ник командой `!confirm`. ' \
-                                        'А пока что будешь с таким рангом :3'.format(mention, required_hash)"""
+                        required_hash = UserData.create_hash(game_user_id, member.id)
+                        confirm_reply = '{0}, если ты правда с хай-эло - выставь `{1}` в коде верификации ' \
+                                        '(`Настройки->About->Verification` в клиенте) и подтверди свой ник командой ' \
+                                        '`!confirm`. А пока что будешь с таким рангом :3'.format(mention, required_hash)
                         yield from self.message(channel, confirm_reply)
             rank_changed = rank != old_rank
 
@@ -835,10 +831,6 @@ class EloBot(DiscordBot):
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
-        yield from self.message(mobj.channel, '{0}, эта команда пока что не работает. '
-                                              'Рито говорят через пару патчей починят'.format(mobj.author.mention))
-
-        '''
         yield from self.client.send_typing(mobj.channel)
         server = self.users.get_or_create_server(mobj.channel.server.id)
         user_data = server.get_user(mobj.author.id)
@@ -854,8 +846,8 @@ class EloBot(DiscordBot):
                                     .format(mobj.author.mention))
             return
 
-        has_required_page = self.riot_api.check_user_runepage(user_data.game_id, bind_hash, region)
-        if has_required_page:
+        has_correct_code = self.riot_api.check_user_verification(user_data.game_id, bind_hash, region)
+        if has_correct_code:
             conflicted_users = self.users.confirm_user(user_data, server)
             yield from self.update_user(mobj.author, user_data, mobj.channel, check_is_conflicted=False, silent=True)
 
@@ -864,10 +856,9 @@ class EloBot(DiscordBot):
             yield from self.message(mobj.channel, success_reply)
             yield from self.remove_conflicted_members(conflicted_users, mobj.channel)
         else:
-            fail_reply = '{0}, поменяй имя одной из страниц рун на `{1}` для подтверждения, ' \
-                         'подожди минуту и повтори команду.'.format(mobj.author.mention, bind_hash)
+            fail_reply = '{0}, поменяй код верификации (`Настройки->About->Verification` в клиенте) на `{1}` ' \
+                         'для подтверждения, подожди минуту и повтори команду.'.format(mobj.author.mention, bind_hash)
             yield from self.message(mobj.channel, fail_reply)
-        '''
 
     @DiscordBot.action('')
     @asyncio.coroutine

@@ -29,6 +29,7 @@ class Users:
             self.logger.info('Users data loaded')
             if file_contents:
                 self.data = jsonpickle.decode(file_contents)
+                self.data.initialize()
                 self.logger.info('Loaded %s servers, total %s users.', self.data.total_servers, self.data.total_users)
             else:
                 self.logger.warning('No data was loaded from \'%s\'', self.full_path)
@@ -98,10 +99,22 @@ class Users:
             self.logger.info('Region failure')
             return False
 
+    def is_member_banned(self, member_id):
+        return self.data.is_member_banned(member_id)
+
+    def set_member_ban(self, member_id, ban_active=True):
+        self.data.set_member_ban(member_id, ban_active)
+        self.save_users()
+
 
 class ServersData(object):
     def __init__(self, servers=[]):
         self.servers = servers
+        self.bans = []
+
+    def initialize(self):
+        if not hasattr(self, 'bans'):
+            self.bans = []
 
     def has_server(self, server_id):
         return self.get_server(server_id) is not None
@@ -136,6 +149,16 @@ class ServersData(object):
     @property
     def total_users(self):
         return sum(s.total_users for s in self.servers)
+
+    def is_member_banned(self, member_id):
+        return member_id in self.bans
+
+    def set_member_ban(self, member_id, ban_active=True):
+        is_banned = self.is_member_banned(member_id)
+        if ban_active and not is_banned:
+            self.bans.append(member_id)
+        if not ban_active and is_banned:
+            self.bans.remove(member_id);
 
 
 class ServerData(object):

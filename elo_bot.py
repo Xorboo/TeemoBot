@@ -429,12 +429,12 @@ class EloBot(DiscordBot):
 
     @asyncio.coroutine
     def check_spam_message(self, mobj):
-        URL_REGEX = r"""(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))"""
-        urls = re.findall(URL_REGEX, mobj.content)
+        url_regex = r"""(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))"""
+        urls = re.findall(url_regex, mobj.content)
         if urls:
             if RolesManager.has_no_role(mobj.author):
                 self.logger.info('Deleting spam: no-role user \'%s\' posted a url \'%s\'', mobj.author, ', '.join(urls))
-                yield from self.delete_spam_message(mobj, False)
+                yield from self.delete_spam_message(mobj, True, add_cancer=False)
             else:
                 has_restricted_url = False
                 for url in urls:
@@ -447,16 +447,17 @@ class EloBot(DiscordBot):
                         break
                 if has_restricted_url:
                     self.logger.info('Deleting spam: user \'%s\' posted a url \'%s\'', mobj.author, ', '.join(urls))
-                    yield from self.delete_spam_message(mobj, True)
+                    yield from self.delete_spam_message(mobj, True, add_cancer=True)
 
     @asyncio.coroutine
-    def delete_spam_message(self, mobj, add_reply):
+    def delete_spam_message(self, mobj, add_reply, add_cancer=True):
         yield from self.client.delete_message(mobj)
         if add_reply:
-            reply = 'Ну что же ты, {0}, спамишь всякими фишинговыми линками? ' \
+            reply = 'Ну что же ты, {0}, спамишь всякими подозрительными линками? ' \
                     'Смотри, забанят за такое чего доброго...'.format(mobj.author.mention)
             yield from self.message(mobj.channel, reply)
-        yield from self.set_cancer(mobj.author, mobj.channel, True, add_reply)
+        if add_cancer:
+            yield from self.set_cancer(mobj.author, mobj.channel, True, add_reply)
 
     @asyncio.coroutine
     def change_member_nickname(self, member, new_name):
@@ -509,13 +510,20 @@ class EloBot(DiscordBot):
                 if rank in EloBot.confirmation_ranks:
                     self.logger.debug('User {0} requested {1} using nickname \'{2}\', putting him to {3}'
                                       .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
-                    # rank = EloBot.rollback_rank.lower()
-                    if not silent and (is_new_data or rank != old_rank):
-                        required_hash = UserData.create_hash(game_user_id, member.id)
-                        confirm_reply = '{0}, если ты правда с хай-эло - выставь `{1}` в коде верификации ' \
-                                        '(`Настройки->About->Verification` в клиенте) и подтверди свой ник командой ' \
-                                        '`!confirm`. А пока что будешь с таким рангом :3'.format(mention, required_hash)
-                        yield from self.message(channel, confirm_reply)
+                    required_hash = UserData.create_hash(game_user_id, member.id)
+                    is_hash_correct = self.riot_api.check_user_verification(game_user_id, required_hash, region)
+                    if is_hash_correct:
+                        self.logger.debug('User {0} already has correct hash, confirming it'.format(member))
+                        yield from self.confirm_user(user, server, member, channel, silent=silent)
+                    else:
+                        self.logger.debug('User {0} is not confirmed, setting default rank'.format(member))
+                        rank = EloBot.rollback_rank.lower()
+                        if not silent and (is_new_data or rank != old_rank):
+                            confirm_reply = '{0}, если ты правда с хай-эло - выставь `{1}` в коде верификации ' \
+                                            '(`Настройки->About->Verification` в клиенте) и подтверди свой ник ' \
+                                            'командой `!confirm`. А пока что будешь с таким рангом :3'\
+                                .format(mention, required_hash)
+                            yield from self.message(channel, confirm_reply)
             rank_changed = rank != old_rank
 
             # Saving user to database
@@ -551,12 +559,15 @@ class EloBot(DiscordBot):
 
                         # Form a reply
                         if rank_changed:
-                            answer = '{0}, твое эло изменилось {1} -> {2}.'\
+                            answer = '{0}, твое эло изменилось [{1} -> {2}]'\
                                 .format(member.mention, rank_old_text, rank_new_text)
                         else:
                             answer = 'Эй {0}, вернулся к нам на канал? Выставил тебе твой ранк {1}'\
                                 .format(member.mention, rank_new_text)
                     if answer:
+                        if not user.is_confirmed:
+                            answer = '{0}\nКстати, можешь подтвердить свой ник командой `!confirm`, ' \
+                                     'чтобы никто его не занял'.format(answer)
                         yield from self.message(channel, answer)
                 else:
                     yield from self.message(channel,
@@ -894,23 +905,30 @@ class EloBot(DiscordBot):
         bind_hash = user_data.bind_hash
         region = server.parameters.get_region()
         if not user_data.game_id:
-            yield from self.message(mobj.channel, 'У тебя устаревшие данные, выполни сначала команду `!nick'
+            yield from self.message(mobj.channel, 'У тебя устаревшие данные, выполни сначала команду `!nick`'
                                     .format(mobj.author.mention))
             return
 
         has_correct_code = self.riot_api.check_user_verification(user_data.game_id, bind_hash, region)
         if has_correct_code:
-            conflicted_users = self.users.confirm_user(user_data, server)
-            yield from self.update_user(mobj.author, user_data, mobj.channel, check_is_conflicted=False, silent=True)
-
-            success_reply = 'Окей {0}, подтвердил твой игровой ник `{1}`'\
-                .format(mobj.author.mention, user_data.nickname)
-            yield from self.message(mobj.channel, success_reply)
-            yield from self.remove_conflicted_members(conflicted_users, mobj.channel)
+            yield from self.confirm_user(user_data, server, mobj.author, mobj.channel)
         else:
             fail_reply = '{0}, поменяй код верификации (`Настройки->About->Verification` в клиенте) на `{1}` ' \
-                         'для подтверждения, подожди минуту и повтори команду.'.format(mobj.author.mention, bind_hash)
+                         'для подтверждения, подожди минуту (он иногда тормозит) и повтори команду.'\
+                .format(mobj.author.mention, bind_hash)
             yield from self.message(mobj.channel, fail_reply)
+
+    @asyncio.coroutine
+    def confirm_user(self, user_data, server, author, channel, silent=False):
+        conflicted_users = self.users.confirm_user(user_data, server)
+        yield from self.update_user(author, user_data, channel, check_is_conflicted=False, silent=True)
+
+        if not silent:
+            success_reply = 'Окей {0}, подтвердил твой игровой ник `{1}`'\
+                .format(author.mention, user_data.nickname)
+            yield from self.message(channel, success_reply)
+        yield from self.remove_conflicted_members(conflicted_users, channel, silent)
+
 
     @DiscordBot.action('')
     @asyncio.coroutine
@@ -934,7 +952,7 @@ class EloBot(DiscordBot):
         return user_cleared
 
     @asyncio.coroutine
-    def remove_conflicted_members(self, conflicted_users, reply_channel):
+    def remove_conflicted_members(self, conflicted_users, reply_channel, silent=False):
         conflicted_members = []
         for user in conflicted_users:
             member_id = user.discord_id
@@ -943,7 +961,7 @@ class EloBot(DiscordBot):
                 conflicted_members.append(conflicted_member)
                 yield from self.clear_name_and_elo(conflicted_member, reply_channel.server, user)
 
-        if conflicted_members:
+        if conflicted_members and not silent:
             members_mentions = ', '.join([x.mention for x in conflicted_members])
             conflict_reply = '{0}: очистил эло, зачем чужие ники юзать, а?'.format(members_mentions)
             yield from self.message(reply_channel, conflict_reply)

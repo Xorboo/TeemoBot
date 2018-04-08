@@ -21,31 +21,49 @@ class NicknamesManager:
 
     @staticmethod
     def get_base_name(member, user_data):
-        base_name = NicknamesManager._clean_name(member.display_name)
+        base_name = NicknamesManager._clean_name(member.display_name, user_data and user_data.is_cancer)
         if user_data and user_data.is_cancer:
             base_name = NicknamesManager._add_cancer(base_name)
         return base_name
 
     @staticmethod
     def create_base_name(name_to_clean, is_cancer):
-        clean_name = NicknamesManager._clean_name(name_to_clean)
-        if is_cancer:
-            clean_name = NicknamesManager._add_cancer(clean_name)
-        return clean_name
+        cleared_name = NicknamesManager._clean_name(name_to_clean)
+        cleared_name = NicknamesManager._update_cancer(cleared_name, is_cancer)
+        return cleared_name
 
     @staticmethod
-    def _clean_name(name):
+    def _clean_name(name, is_cancer=False):
         br_open = name.rfind('(')
         br_close = name.rfind(')')
         br_first = min(br_open, br_close)
         if br_first >= 0:
-            return (name[:br_first]).strip()
-        return name.strip()
+            cleared_name = (name[:br_first]).strip()
+            if len(cleared_name) == 0:
+                cleared_name = name.replace('(', '[').replace(')', ']').strip()
+        else:
+            cleared_name = name.strip()
+
+        cleared_name = NicknamesManager._update_cancer(cleared_name, is_cancer)
+        return cleared_name
+
+    @staticmethod
+    def _update_cancer(name, is_cancer):
+        if is_cancer:
+            return NicknamesManager._add_cancer(name)
+        else:
+            return NicknamesManager._remove_cancer(name)
 
     @staticmethod
     def _add_cancer(name):
         if not name.startswith('🦀'):
             name = '🦀 ' + name
+        return name
+
+    @staticmethod
+    def _remove_cancer(name):
+        if name.startswith('🦀'):
+            name = name.replace('🦀', '').strip()
         return name
 
     @staticmethod

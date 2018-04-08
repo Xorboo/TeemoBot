@@ -178,10 +178,10 @@ class RiotAPI:
         url = '{0}/{1}'.format(RiotAPI.confirm_url(region), summoner_id)
         response, error_code = self.send_request(url, region)
         if error_code:
-            return False
+            return False, 'Error: {0}'.format(error_code)
         else:
             response_code = response[1:-1].strip()
-            return response_code == required_code
+            return response_code == required_code, response_code
 
     class UserIdNotFoundException(Exception):
         pass

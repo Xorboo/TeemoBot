@@ -147,17 +147,22 @@ class EloBot(DiscordBot):
                     return
 
                 try:
+                    success = False
                     user_data = server_data.get_user_by_index(user_index)
                     if user_data.has_data:
                         success = yield from self.autoupdate_user(server_data, user_data)
                     else:
                         server, member = self.find_member_by_id(server_data.server_id, user_data.discord_id)
-                        success = yield from self.clear_user_data(member, server)
-                        if success:
-                            channel = EloBot.get_bots_channel(server)
-                            yield from self.message(channel, '{0}, тебя не было в базе, обнулил твои данные. '
-                                                    'Повтори `!nick` для возвращения эло.'.format(member.mention))
-                            yield from asyncio.sleep(self.success_sleep_pause)
+                        if server and member:
+                            success = yield from self.clear_user_data(member, server)
+                            # Sending message only if user data was in storage,
+                            # otherwise it's just a nickname with brackets, so we silently clear them
+                            if success:
+                                channel = EloBot.get_bots_channel(server)
+                                yield from self.message(channel, '{0}, у тебя было что-то не так с ником, пофиксил его. '
+                                                        'Напиши `!nick` для возвращения эло.'.format(member.mention))
+                                yield from asyncio.sleep(self.success_sleep_pause)
+
                     if success:
                         yield from asyncio.sleep(self.success_sleep_pause)
                     yield from asyncio.sleep(self.small_sleep_pause)
@@ -186,16 +191,18 @@ class EloBot(DiscordBot):
 
                 member = list(server.members)[member_index]
                 user_data = server_data.get_user(member.id)
+
                 if user_data and user_data.has_data:
                     success = yield from self.autoupdate_user(server_data, user_data)
-                    if success:
-                        yield from asyncio.sleep(self.success_sleep_pause)
                 else:
-                    user_cleared = yield from self.clear_user_data(member, server)
-                    if user_cleared:
-                        yield from self.message(channel, '{0}, тебя не было в базе, обнулил твои данные. '
-                                                'Повтори `!nick` для возвращения эло.'.format(member.mention))
-                        yield from asyncio.sleep(self.success_sleep_pause)
+                    success = yield from self.clear_user_data(member, server)
+                    # Sending message only if user data was in storage,
+                    # otherwise it's just a nickname with brackets, so we silently clear them
+                    if user_data and success:
+                        yield from self.message(channel, '{0}, у тебя было что-то не так с ником, пофиксил его. '
+                                                'Напиши `!nick` для возвращения эло.'.format(member.mention))
+                if success:
+                    yield from asyncio.sleep(self.success_sleep_pause)
                 yield from asyncio.sleep(self.small_sleep_pause)
                 member_index += 1
             server_index += 1
@@ -511,7 +518,7 @@ class EloBot(DiscordBot):
                     self.logger.debug('User {0} requested {1} using nickname \'{2}\', putting him to {3}'
                                       .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
                     required_hash = UserData.create_hash(game_user_id, member.id)
-                    is_hash_correct = self.riot_api.check_user_verification(game_user_id, required_hash, region)
+                    is_hash_correct, current_code = self.riot_api.check_user_verification(game_user_id, required_hash, region)
                     if is_hash_correct:
                         self.logger.debug('User {0} already has correct hash, confirming it'.format(member))
                         yield from self.confirm_user(user, server, member, channel, silent=silent)
@@ -566,8 +573,10 @@ class EloBot(DiscordBot):
                                 .format(member.mention, rank_new_text)
                     if answer:
                         if not user.is_confirmed:
-                            answer = '{0}\nКстати, можешь подтвердить свой ник командой `!confirm`, ' \
-                                     'чтобы никто его не занял'.format(answer)
+                            answer = '{0}\nКстати, можешь поменять код верификации ' \
+                                     '(`Настройки->About->Verification` в клиенте) на `{1}` ' \
+                                     'и подтвердить свой ник командой `!confirm`, ' \
+                                     'чтобы никто на канале его не занял'.format(answer, user.bind_hash)
                         yield from self.message(channel, answer)
                 else:
                     yield from self.message(channel,
@@ -909,13 +918,13 @@ class EloBot(DiscordBot):
                                     .format(mobj.author.mention))
             return
 
-        has_correct_code = self.riot_api.check_user_verification(user_data.game_id, bind_hash, region)
+        has_correct_code, current_code = self.riot_api.check_user_verification(user_data.game_id, bind_hash, region)
         if has_correct_code:
             yield from self.confirm_user(user_data, server, mobj.author, mobj.channel)
         else:
             fail_reply = '{0}, поменяй код верификации (`Настройки->About->Verification` в клиенте) на `{1}` ' \
-                         'для подтверждения, подожди минуту (он иногда тормозит) и повтори команду.'\
-                .format(mobj.author.mention, bind_hash)
+                         'для подтверждения, подожди минуту (он иногда тормозит) и повтори команду. ' \
+                         'Сейчас у тебя стоит код `{2}`'.format(mobj.author.mention, bind_hash, current_code)
             yield from self.message(mobj.channel, fail_reply)
 
     @asyncio.coroutine
@@ -928,7 +937,6 @@ class EloBot(DiscordBot):
                 .format(author.mention, user_data.nickname)
             yield from self.message(channel, success_reply)
         yield from self.remove_conflicted_members(conflicted_users, channel, silent)
-
 
     @DiscordBot.action('')
     @asyncio.coroutine

@@ -1,10 +1,14 @@
-from logging_settings import logging
 import sys
+from logging_settings import logging
+# from pid.decorator import pidfile
 from elo_bot import EloBot
+
+
 # from users_c import UsersC
 
 
-if __name__ == "__main__":
+# @pidfile()
+def main():
     logger = logging.getLogger(__name__)
 
     logger.info('========================================================')
@@ -23,5 +27,9 @@ if __name__ == "__main__":
         logger.error('Not all tokens are loader properly, quitting. Used data folder: \'%s\'', data_folder)
 
     # This shouldn't be called
-        logger.info('Bot finishing...')
-        logger.info('=========================================================================')
+    logger.info('Bot finishing...')
+    logger.info('=========================================================================')
+
+
+if __name__ == "__main__":
+    main()

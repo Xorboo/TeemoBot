@@ -4,6 +4,7 @@ import logging
 import urllib.request
 import urllib.error
 from urllib.parse import quote
+from riotwatcher import RiotWatcher, ApiError
 
 
 class RiotAPI:
@@ -47,11 +48,25 @@ class RiotAPI:
     def __init__(self, riot_key):
         self._api_key = ""
         self.api_key = riot_key
-        # self.load_key(data_folder)
+        self.watcher = RiotWatcher(riot_key)
+        try:
+            t1 = self.watcher.summoner.by_name("euw1", "Xorboo")
+            t1code = self.watcher.third_party_code.by_summoner("euw1", t1["id"])
+            t2 = self.watcher.summoner.by_name("eun1", "Xorbest")
+            t2code = self.watcher.third_party_code.by_summoner("eun1", t2["id"])
+        except ApiError as err:
+            pass
 
     @staticmethod
     def has_region(region):
         return region in RiotAPI._regions
+
+    @staticmethod
+    def get_region_base(region):
+        if RiotAPI.has_region(region):
+            return RiotAPI._regions[region].base
+        else:
+            return ""
 
     @staticmethod
     def base_url(region):
@@ -100,18 +115,6 @@ class RiotAPI:
     @property
     def key_is_valid(self):
         return bool(self._api_key)
-
-    def load_key(self, data_folder):
-        key_full_path = os.path.join(data_folder, RiotAPI.key_file_name)
-        self.logger.info('Loading RiotAPI key from \'%s\'', key_full_path)
-        try:
-            f = open(key_full_path, 'r')
-            self._api_key = f.read()
-            f.close()
-            self.logger.info('Riot API key loaded: \'%s\'', self._api_key)
-        except IOError as e:
-            self.logger.error('Couldn\'t open riot api key file, create file with the api key in \'%s\'. Error: \'%s\'',
-                              key_full_path, e)
 
     def send_request(self, request_url, region):
         content = None
@@ -175,6 +178,7 @@ class RiotAPI:
 
     def check_user_verification(self, summoner_id, required_code, region):
         required_code = required_code.strip()
+        # self.watcher.third_party_code.by_summoner(region, summoner_id)
         url = '{0}/{1}'.format(RiotAPI.confirm_url(region), summoner_id)
         response, error_code = self.send_request(url, region)
         if error_code:

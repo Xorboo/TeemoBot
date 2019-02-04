@@ -23,13 +23,6 @@ class RiotAPI:
         'challenger': 7,
     }
 
-    key_file_name = 'riot_api_key.txt'
-
-    _base_url = 'https://{0}.api.riotgames.com/'
-    _summoner_url = 'lol/summoner/v3/summoners/'
-    _league_url = 'lol/league/v3/'
-    _confirm_url = 'lol/platform/v3/third-party-code/by-summoner'
-
     allowed_regions = 'euw | eune | na | ru | kr | br | oce | jp | tr | lan | las'
     _regions = {
         'euw': {'base': 'euw1', 'league': 'euw'},
@@ -49,55 +42,17 @@ class RiotAPI:
         self._api_key = ""
         self.api_key = riot_key
         self.watcher = RiotWatcher(riot_key)
-        try:
-            t1 = self.watcher.summoner.by_name("euw1", "Xorboo")
-            t1code = self.watcher.third_party_code.by_summoner("euw1", t1["id"])
-            t2 = self.watcher.summoner.by_name("eun1", "Xorbest")
-            t2code = self.watcher.third_party_code.by_summoner("eun1", t2["id"])
-        except ApiError as err:
-            pass
 
     @staticmethod
-    def has_region(region):
+    def _has_region(region):
         return region in RiotAPI._regions
 
     @staticmethod
-    def get_region_base(region):
-        if RiotAPI.has_region(region):
-            return RiotAPI._regions[region].base
+    def _get_region_base(region):
+        if RiotAPI._has_region(region):
+            return RiotAPI._regions[region]['base']
         else:
             return ""
-
-    @staticmethod
-    def base_url(region):
-        if RiotAPI.has_region(region):
-            base_region = RiotAPI._regions[region]['base']
-            return RiotAPI._base_url.format(base_region)
-        else:
-            RiotAPI.logger.error('Requested unknown region for base_url: \'%s\'', region)
-            return ''
-
-    @staticmethod
-    def summoner_url(_):
-        return RiotAPI._summoner_url
-
-    @staticmethod
-    def league_url(region):
-        if RiotAPI.has_region(region):
-            league_region = RiotAPI._regions[region]['league']
-            return RiotAPI._league_url.format(league_region)
-        else:
-            RiotAPI.logger.error('Requested unknown region for league_url: \'%s\'', region)
-            return ''
-
-    @staticmethod
-    def confirm_url(region):
-        if RiotAPI.has_region(region):
-            league_region = RiotAPI._regions[region]['league']
-            return RiotAPI._confirm_url.format(league_region)
-        else:
-            RiotAPI.logger.error('Requested unknown region for league_url: \'%s\'', region)
-            return ''
 
     @property
     def api_key(self):
@@ -106,6 +61,7 @@ class RiotAPI:
     @api_key.setter
     def api_key(self, value):
         self._api_key = value
+        # TODO Dont log full api key
         self.logger.info('Riot API key loaded: \'%s\'', value)
 
     @property
@@ -116,56 +72,48 @@ class RiotAPI:
     def key_is_valid(self):
         return bool(self._api_key)
 
-    def send_request(self, request_url, region):
-        content = None
-        try:
-            if not self.key_is_valid:
-                self.logger.error('Key is not set, ignoring request \'%s\'', request_url)
-                return content
-            url = RiotAPI.base_url(region) + request_url + self.riot_key_request
-            self.logger.debug('Sending request to: \'%s\'', url)
-            content = urllib.request.urlopen(url).read().decode()
-            return content, None
-        except urllib.error.HTTPError as e:
-            self.logger.error('Error while sending request to RiotAPI: %s', e)
-            return None, e.code
-
     def get_summoner_data(self, region, user_id=None, nickname=None):
-        if user_id:
-            api_url = '{0}{1}'.format(RiotAPI.summoner_url(region), user_id)
-        elif nickname:
-            encoded_nickname = urllib.parse.quote(nickname.lower())
-            api_url = '{0}by-name/{1}'.format(RiotAPI.summoner_url(region), encoded_nickname)
-        else:
-            raise Exception('No user id or nickname provided for RiotAPI')
+        try:
+            if nickname:
+                nickname = urllib.parse.quote(nickname.lower())
 
-        user_content, error_code = self.send_request(api_url, region)
-        if user_content is None:
-            self.logger.info('Couldn\'t find user by \'{0}\' or id \'{1}\''.format(nickname, user_id).encode('utf-8'))
-            if error_code == 404:
-                raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname {0}'.format(nickname))
+            if user_id:
+                # Update older id to a new one
+                if len(str(user_id)) < 15 and nickname:
+                    user_data = self.watcher.summoner.by_name(RiotAPI._get_region_base(region), nickname)
+                else:
+                    user_data = self.watcher.summoner.by_id(RiotAPI._get_region_base(region), nickname)
+            elif nickname:
+                user_data = self.watcher.summoner.by_name(RiotAPI._get_region_base(region), nickname)
             else:
-                raise RiotAPI.RiotRequestException('Unknown request response error: {0}'.format(error_code), error_code)
+                raise Exception('No user id or nickname provided for RiotAPI')
+            return user_data['id'], user_data['name'].strip()
 
-        user_data_json = json.loads(user_content)
-        return user_data_json['id'], user_data_json['name'].strip()
+        except ApiError as exc:
+            if exc.response.status_code == 404:
+                raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname "{0}"'.format(nickname))
+            else:
+                raise RiotAPI.RiotRequestException('Unknown request response error: {0}'.format(exc.response.status_code), exc.response.status_code)
 
     def get_user_info(self, region, user_id=None, nickname=None):
-        self.logger.debug('Getting user elo for \'{0}\''.format(nickname).encode('utf-8'))
-        real_id, real_name = self.get_summoner_data(region, user_id=user_id, nickname=nickname)
-
-        best_rank = 'unranked'
-        url = '{0}positions/by-summoner/{1}'.format(RiotAPI.league_url(region), real_id)
-        ranks_content, error_code = self.send_request(url, region)
-        if not ranks_content:
+        try:
+            self.logger.debug('Getting user elo for \'{0}\''.format(nickname).encode('utf-8'))
+            encrypted_summoner_id, summoner_name = self.get_summoner_data(region, user_id=user_id, nickname=nickname)
+            region = RiotAPI._get_region_base(region)
+            summoner_ranks = self.watcher.league.positions_by_summoner(region, encrypted_summoner_id)
+            best_rank = RiotAPI._get_best_rank(summoner_ranks)
+            return best_rank, encrypted_summoner_id, summoner_name
+        except ApiError as exc:
+            status_code = exc.response.status_code
             raise RiotAPI.RiotRequestException('Error while getting leagues data for {0}: {1}'
-                                               .format(real_name, error_code), error_code)
+                                               .format(summoner_name, status_code), status_code)
 
+    @staticmethod
+    def _get_best_rank(summoner_ranks):
+        best_rank = 'unranked'
         best_rank_id = RiotAPI.ranks[best_rank]
 
-        ranks_data = json.loads(ranks_content)
-        # game_modes = ranks_data[user_id_str]
-        for mode in ranks_data:
+        for mode in summoner_ranks:
             queue = mode['queueType']
             if queue != 'RANKED_SOLO_5x5' and queue != 'RANKED_FLEX_SR':
                 continue
@@ -174,18 +122,19 @@ class RiotAPI:
             if rank_id > best_rank_id:
                 best_rank = rank
                 best_rank_id = rank_id
-        return best_rank, real_id, real_name
+        return best_rank
 
-    def check_user_verification(self, summoner_id, required_code, region):
-        required_code = required_code.strip()
-        # self.watcher.third_party_code.by_summoner(region, summoner_id)
-        url = '{0}/{1}'.format(RiotAPI.confirm_url(region), summoner_id)
-        response, error_code = self.send_request(url, region)
-        if error_code:
-            return False, 'Error: {0}'.format(error_code)
-        else:
-            response_code = response[1:-1].strip()
+    def check_user_verification(self, encrypted_summoner_id, required_code, region):
+        try:
+            required_code = required_code.strip()
+            region = RiotAPI._get_region_base(region);
+            response_code = self.watcher.third_party_code.by_summoner(region, encrypted_summoner_id)
             return response_code == required_code, response_code
+        except ApiError as exc:
+            if exc.response.status_code == 404:
+                return False, "Никакого кода не установлено"
+            else:
+                return False, 'Ошибка: {0}'.format(exc.response.status_code)
 
     class UserIdNotFoundException(Exception):
         pass

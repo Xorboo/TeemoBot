@@ -282,7 +282,7 @@ class ServerParameters(object):
 
     def set_region(self, region):
         region = region.lower().strip()
-        if RiotAPI.has_region(region):
+        if RiotAPI._has_region(region):
             self.region = region
             return True
         else:

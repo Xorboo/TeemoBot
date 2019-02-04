@@ -494,12 +494,12 @@ class EloBot(DiscordBot):
             # Getting user elo using RiotAPI
             server = self.users.get_or_create_server(channel.server.id)
             region = server.parameters.get_region()
-            rank, game_user_id, nickname = self.riot_api.get_user_info(
+            rank, summoner_id, nickname = self.riot_api.get_user_info(
                 region, user_id=user.game_id, nickname=user.nickname)
             rank = rank.lower()
 
             if check_is_conflicted:
-                confirmed_user = server.find_confirmed_user(game_user_id)
+                confirmed_user = server.find_confirmed_user(summoner_id)
                 if confirmed_user:
                     if confirmed_user.discord_id != user.discord_id:
                         if not silent:
@@ -509,7 +509,7 @@ class EloBot(DiscordBot):
                         return result
 
                 # Changing game nickname - 'unconfirming' user
-                if user.game_id != game_user_id:
+                if user.game_id != summoner_id:
                     user.confirmed = False
 
             # Checking high-elo
@@ -517,8 +517,8 @@ class EloBot(DiscordBot):
                 if rank in EloBot.confirmation_ranks:
                     self.logger.debug('User {0} requested {1} using nickname \'{2}\', putting him to {3}'
                                       .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
-                    required_hash = UserData.create_hash(game_user_id, member.id)
-                    is_hash_correct, current_code = self.riot_api.check_user_verification(game_user_id, required_hash, region)
+                    required_hash = UserData.create_hash(summoner_id, member.id)
+                    is_hash_correct, current_code = self.riot_api.check_user_verification(summoner_id, required_hash, region)
                     if is_hash_correct:
                         self.logger.debug('User {0} already has correct hash, confirming it'.format(member))
                         yield from self.confirm_user(user, server, member, channel, silent=silent)
@@ -534,7 +534,7 @@ class EloBot(DiscordBot):
             rank_changed = rank != old_rank
 
             # Saving user to database
-            self.users.update_user(user, game_user_id, nickname, rank)
+            self.users.update_user(user, summoner_id, nickname, rank)
 
             # Updating users role on server
             roles_manager = RolesManager(channel.server.roles)

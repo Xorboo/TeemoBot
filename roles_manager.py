@@ -16,18 +16,17 @@ class RolesManager:
             if role_name in RiotAPI.ranks:
                 self.rank_roles.insert(0, r)
                 self.rank_ids.insert(0, r.id)
-        pass
 
     @staticmethod
     def has_no_role(member):
         for role in member.roles:
-            if not role.is_everyone and role.name.lower() != RiotAPI.initial_rank:
+            if not role.is_everyone and role.name.lower() != RiotAPI.unknown_rank:
                 return False
         return True
 
     @asyncio.coroutine
     def set_user_initial_role(self, client, member):
-        role_results = yield from self.set_user_role(client, member, RiotAPI.initial_rank)
+        role_results = yield from self.set_user_role(client, member, RiotAPI.unknown_rank)
         return role_results
 
     @asyncio.coroutine

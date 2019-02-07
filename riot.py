@@ -90,6 +90,7 @@ class RiotAPI:
             if exc.response.status_code == 404:
                 raise RiotAPI.UserIdNotFoundException('Couldn\'t find a username with nickname "{0}"'.format(nickname))
             else:
+                self.logger.error('Summoner data \'{0}\' exception:  {0}'.format(nickname, str(exc)).encode('utf-8'))
                 raise RiotAPI.RiotRequestException('Unknown request response error: {0}'
                                                    .format(exc.response.status_code), exc.response.status_code)
 
@@ -103,6 +104,7 @@ class RiotAPI:
             return best_rank, encrypted_summoner_id, summoner_name
 
         except ApiError as exc:
+            self.logger.error('User info \'{0}\' exception:  {0}'.format(nickname, str(exc)).encode('utf-8'))
             status_code = exc.response.status_code
             if status_code == 404:
                 raise RiotAPI.UserIdNotFoundException()
@@ -112,6 +114,9 @@ class RiotAPI:
 
     def check_user_verification(self, encrypted_summoner_id, required_code, region):
         try:
+            if len(str(encrypted_summoner_id)) < 15:
+                self.logger.error('Bad summoner id during verification:  \'{0}\''.format(encrypted_summoner_id))
+                return False, "Сначала обнови свой ник командой !nick"
             required_code = required_code.strip()
             region = RiotAPI._get_region_base(region)
             response_code = self.watcher.third_party_code.by_summoner(region, encrypted_summoner_id)
@@ -120,6 +125,7 @@ class RiotAPI:
             if exc.response.status_code == 404:
                 return False, "Никакого кода не установлено"
             else:
+                self.logger.error('Verification exception:  \'{0}\''.format(str(exc)))
                 return False, 'Ошибка: {0}'.format(exc.response.status_code)
 
     @staticmethod

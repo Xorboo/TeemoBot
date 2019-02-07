@@ -28,7 +28,7 @@ class EloBot(DiscordBot):
     api_check_period = 60
     api_check_data = {'name': 'Xorboo', 'region': 'euw'}
     # Ranks that will require account confirmation
-    confirmation_ranks = ['diamond', 'master', 'challenger']
+    confirmation_ranks = ['diamond', 'master', 'challenger', 'grandmaster']
     rollback_rank = 'bronze'
 
     initial_sleep_pause = 3    # Before starting autoupdate

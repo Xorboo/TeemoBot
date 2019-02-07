@@ -6,7 +6,7 @@ if [[ -n "$1" ]]; then
 	
 	while true
 	do
-		if pgrep -f "EloBot/main\.py" 1>/dev/null;then
+		if pgrep -f "TeemoBot/main\.py" 1>/dev/null;then
 			sleep 5
 		else
 			echo "===================================================="

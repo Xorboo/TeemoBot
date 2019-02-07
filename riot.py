@@ -24,8 +24,8 @@ class RiotAPI:
         'platinum':    5,
         'diamond':     6,
         'master':      7,
-        'challenger':  8,
-        'grandmaster': 9
+        'grandmaster': 8,
+        'challenger':  9,
     }
 
     _regions = {

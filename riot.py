@@ -99,7 +99,7 @@ class RiotAPI:
             self.logger.debug('Getting user elo for \'{0}\''.format(nickname).encode('utf-8'))
             encrypted_summoner_id, summoner_name = self.get_summoner_data(region, user_id=user_id, nickname=nickname)
             region = RiotAPI._get_region_base(region)
-            summoner_ranks = self.watcher.league.positions_by_summoner(region, encrypted_summoner_id)
+            summoner_ranks = self.watcher.league.by_summoner(region, encrypted_summoner_id)
             best_rank = RiotAPI._get_best_rank(summoner_ranks)
             return best_rank, encrypted_summoner_id, summoner_name
 

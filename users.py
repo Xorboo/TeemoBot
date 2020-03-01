@@ -53,11 +53,11 @@ class Users:
             self.is_dirty = False
 
     def get_user(self, member):
-        server = self.data.get_or_create_server(member.server.id)
+        server = self.data.get_or_create_server(member.guild.id)
         return server.get_user(member.id)
 
     def remove_user(self, member):
-        server = self.data.get_or_create_server(member.server.id)
+        server = self.data.get_or_create_server(member.guild.id)
         server.remove_user(member.id)
         self.save_users()
 
@@ -69,7 +69,7 @@ class Users:
         return user
 
     def get_or_create_user(self, member):
-        server = self.data.get_or_create_server(member.server.id)
+        server = self.data.get_or_create_server(member.guild.id)
         return server.get_or_create_user(member.id)
 
     def update_user(self, user, game_user_id, nickname, rank):

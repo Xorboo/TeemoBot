@@ -39,7 +39,7 @@ class RolesManager:
         try:
             if has_new_roles:
                 self.logger.info('Setting role \'%s\' for \'%s\'', role_name, member)
-                yield from client.replace_roles(member, *new_roles)
+                yield from member.edit(roles=new_roles, reason=f'Setting role \'{role_name}\'')
             return True, role, has_new_roles
         except discord.errors.Forbidden as e:
             self.logger.error('Error setting role: %s', e)

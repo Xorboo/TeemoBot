@@ -31,7 +31,7 @@ class DiscordBot:
     def is_admin(member):
         if not isinstance(member, discord.Member):
             return False
-        return member.server_permissions.administrator
+        return member.guild_permissions.administrator
 
     def is_owner(self, member):
         if not isinstance(member, discord.User):
@@ -108,7 +108,12 @@ class DiscordBot:
         # self.token = DiscordBot.load_token(token_file_path)
         self.token = parameters_json["token"]
         self.owner_id = parameters_json["owner_id"]
-        self.owner = discord.User(username='Xorboo', id=self.owner_id, discriminator='6178', avatar='')
+        self.owner = discord.User(state=None, data={
+            'username': 'Xorboo',
+            'id': self.owner_id,
+            'discriminator': 6178,
+            'avatar': None
+        })
 
     @property
     def token_is_valid(self):
@@ -133,7 +138,7 @@ class DiscordBot:
         So that we don't have to arbitrarily type
         'self.client.send_message' all the time
         """
-        msg = yield from self.client.send_message(channel, string)
+        msg = await channel.send(string)
         return msg
 
     def display_invite_link(self):

@@ -7,6 +7,9 @@ import discord
 import json
 import types
 import re
+
+from discord.abc import PrivateChannel
+
 from discord_bot import DiscordBot
 from riot import RiotAPI
 from users import Users, UserData
@@ -31,9 +34,10 @@ class EloBot(DiscordBot):
     confirmation_ranks = ['diamond', 'master', 'challenger', 'grandmaster']
     rollback_rank = 'bronze'
 
-    initial_sleep_pause = 3    # Before starting autoupdate
+    initial_sleep_pause = 3     # Before starting autoupdate
     success_sleep_pause = 4     # After successful update (for Discord limits)
     small_sleep_pause = 1       # After check without update (for RiotAPI limits)
+    medium_sleep_pause = 10     # Some error happened
     long_sleep_pause = 300      # If over-limited RiotAPI
 
     restricted_urls = [
@@ -93,17 +97,17 @@ class EloBot(DiscordBot):
     def event_ready(self):
         @asyncio.coroutine
         def on_ready():
-            self.logger.info('Connection status: %s', self.client.is_logged_in)
+            self.logger.info('Connection status: %s', self.client.is_ready())
 
             self.display_invite_link()
             yield from self.set_status(self.STATUS)
 
-            for s in self.client.servers:
-                self.logger.info('Updating data for server \'%s\'...', s)
-                prune_amount = yield from self.client.estimate_pruned_members(s, days=30)
-                self.logger.info('Inactive members for the last 30 days: %s/%s.', prune_amount, len(s.members))
-                self.emoji.update_server(s)
-                yield from self.check_no_elo_members(s)
+            for guild in self.client.guilds:
+                self.logger.info('Updating data for guild \'%s\'...', guild)
+                prune_amount = yield from guild.estimate_pruned_members(days=30)
+                self.logger.info('Inactive members for the last 30 days: %s/%s.', prune_amount, len(guild.members))
+                self.emoji.update_server(guild)
+                yield from self.check_no_elo_members(guild)
             self.logger.info('Finished \'on_ready()\'')
         return on_ready
 
@@ -223,7 +227,10 @@ class EloBot(DiscordBot):
             member, user, channel, check_is_conflicted=True, silent=is_silent, is_new_data=False)
         if result.api_error:
             self.logger.error('Autoupdate request riot API error: %s', result.api_error)
-            yield from asyncio.sleep(self.long_sleep_pause)
+            if result.api_error == 429:
+                yield from asyncio.sleep(self.long_sleep_pause)
+            else:
+                yield from asyncio.sleep(self.medium_sleep_pause)
 
         # Periodic extra save call in case we have changes
         self.users.save_users(check_if_dirty=True)
@@ -287,10 +294,10 @@ class EloBot(DiscordBot):
     def event_join(self):
         @asyncio.coroutine
         def on_member_join(member):
-            self.logger.info('User \'%s\' joined to the server \'%s\'', member.name, member.server)
-            server = member.server
+            self.logger.info('User \'%s\' joined to the server \'%s\'', member.name, member.guild)
+            guild = member.guild
 
-            server_data = self.users.get_or_create_server(server.id)
+            server_data = self.users.get_or_create_server(guild.id)
             user_data = server_data.get_user(member.id)
             success = False
             if user_data:
@@ -298,21 +305,21 @@ class EloBot(DiscordBot):
             # Force user to have default gray role
 
             if success:
-                emojis = self.emoji.s(server)
+                emojis = self.emoji.s(guild)
                 rank_text = emojis.get(user_data.rank)
                 if not rank_text:
                     rank_text = user_data.rank
                 msg = 'Привет {0.mention}! Опять ты выходишь на связь? Поставил тебе {1}'.format(member, rank_text)
-                yield from self.message(member.server, msg)
+                yield from self.message(guild, msg)
             else:
                 yield from self.welcome_default(member)
         return on_member_join
 
     @asyncio.coroutine
     def welcome_default(self, member):
-        server = member.server
+        guild = member.guild
         try:
-            roles_manager = RolesManager(server.roles)
+            roles_manager = RolesManager(guild.roles)
             role_results = yield from roles_manager.set_user_initial_role(self.client, member)
             success = role_results[0]
             if not success:
@@ -323,9 +330,9 @@ class EloBot(DiscordBot):
         fmt = 'Привет {0.mention}! {1} Чтобы установить свое эло и игровой ник, напиши {2}. ' + \
               'Так людям будет проще тебя найти, да и ник не будет таким серым (как твоя жизнь{3}). ' \
               'Так же есть `!base` для установки первой части ника, и вообще смотри в `!help`'
-        em = self.emoji.s(server)
-        text = fmt.format(member, em.poro, self.get_basic_hint(server.id), em.kappa)
-        yield from self.message(server, text)
+        em = self.emoji.s(guild)
+        text = fmt.format(member, em.poro, self.get_basic_hint(guild.id), em.kappa)
+        yield from self.message(guild, text)
 
     @DiscordBot.owner_action('<new RiotAPI key>')
     @asyncio.coroutine
@@ -340,7 +347,7 @@ class EloBot(DiscordBot):
         self.riot_api.api_key = new_key
         self.save_parameters()
         yield from self.message(mobj.channel, 'Окей {0}, обновил ключ RiotAPI'.format(mobj.author.mention))
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             yield from self.message(mobj.channel, 'Удали свое сообщение с ключом, на всякий случай.')
         else:
             yield from self.client.delete_message(mobj)
@@ -472,7 +479,7 @@ class EloBot(DiscordBot):
             try:
                 self.logger.info('Changing nickname from \'{0}\' to \'{1}\' for \'{2}\''
                                  .format(member.display_name, new_name, member).encode('utf-8'))
-                yield from self.client.change_nickname(member, new_name)
+                yield from member.edit(nick=new_name, reason=f'Changing nickname to \'{new_name}\'')
                 return True, True
             except discord.errors.Forbidden as e:
                 self.logger.error('Error setting nickname: %s', e)
@@ -492,7 +499,7 @@ class EloBot(DiscordBot):
         old_rank = user.rank.lower()
         try:
             # Getting user elo using RiotAPI
-            server = self.users.get_or_create_server(channel.server.id)
+            server = self.users.get_or_create_server(channel.guild.id)
             region = server.parameters.get_region()
             rank, summoner_id, nickname = self.riot_api.get_user_info(
                 region, user_id=user.game_id, nickname=user.nickname)
@@ -537,7 +544,7 @@ class EloBot(DiscordBot):
             self.users.update_user(user, summoner_id, nickname, rank)
 
             # Updating users role on server
-            roles_manager = RolesManager(channel.server.roles)
+            roles_manager = RolesManager(channel.guild.roles)
             role_success, new_role, roles_changed = yield from roles_manager.set_user_role(self.client, member, rank)
             result.rank = rank_changed or roles_changed
 
@@ -552,7 +559,7 @@ class EloBot(DiscordBot):
             # Replying
             if not silent and (is_new_data or result.rank):
                 if role_success:
-                    emojis = self.emoji.s(channel.server)
+                    emojis = self.emoji.s(channel.guild)
                     if is_new_data:
                         answer = Answers.generate_answer(member, new_role.name, emojis)
                     else:
@@ -591,7 +598,7 @@ class EloBot(DiscordBot):
             api_working = self.check_api_if_needed()
             if api_working:
                 requested_nickname = user.nickname
-                yield from self.clear_user_data(member, channel.server)
+                yield from self.clear_user_data(member, channel.guild)
                 if not silent:
                     if is_new_data:
                         error_reply = '{0}, ты рак, нет такого ника `{1}` в лиге на `{2}`. '\
@@ -609,7 +616,7 @@ class EloBot(DiscordBot):
                                             'Но вообще я и сам ему напишу...'
                                             .format(member.mention, api_url, self.owner, self.owner.mention))
                     yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
-                                                        'а АПИ лежит...'.format(channel.server, member, user.nickname))
+                                                        'а АПИ лежит...'.format(channel.guild, member, user.nickname))
 
         except RiotAPI.RiotRequestException as e:
             result.api_error = e.error_code
@@ -626,14 +633,14 @@ class EloBot(DiscordBot):
 
     @asyncio.coroutine
     def change_lol_nickname(self, member, nickname, channel):
-        self.logger.info('Recieved !nick command for \'{0}\' on \'{1}\''.format(nickname, channel.server)
+        self.logger.info('Recieved !nick command for \'{0}\' on \'{1}\''.format(nickname, channel.guild)
                          .encode('utf-8'))
 
         if not nickname:
             yield from self.message(channel, 'Ник то напиши после `!nick`, ну...')
             return
 
-        yield from self.client.send_typing(channel)
+        yield from channel.trigger_typing()
 
         # Setting new nickname - clearing user data before update
         user = self.users.get_or_create_user(member)
@@ -651,7 +658,7 @@ class EloBot(DiscordBot):
         Установить свой игровой ник и эло, чтобы людям было проще тебя найти в игре.
         Например '!nick xXNagibatorXx'
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -667,7 +674,7 @@ class EloBot(DiscordBot):
         Проверить эло кого-нибудь.
         Например '!elo xXNagibatorXx'
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -678,11 +685,11 @@ class EloBot(DiscordBot):
             member = mobj.author
             nickname = ' '.join(args).strip()
             # Getting user elo using RiotAPI
-            server = self.users.get_or_create_server(channel.server.id)
+            server = self.users.get_or_create_server(channel.guild.id)
             region = server.parameters.get_region()
             rank, game_user_id, real_nickname = self.riot_api.get_user_info(region, nickname=nickname)
 
-            emojis = self.emoji.s(channel.server)
+            emojis = self.emoji.s(channel.guild)
             rank_text = emojis.get(rank)
             if not rank_text:
                 rank_text = rank
@@ -703,7 +710,7 @@ class EloBot(DiscordBot):
                                         'Но вообще я и сам ему напишу...'
                                         .format(member.mention, api_url, self.owner, self.owner.mention))
                 yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
-                                                    'а АПИ лежит...'.format(channel.server, member, nickname))
+                                                    'а АПИ лежит...'.format(channel.guild, member, nickname))
 
         except RiotAPI.RiotRequestException as e:
             error_reply = '{0}, произошла ошибка при запросе к RiotAPI, попробуй попозже.'.format(member.mention)
@@ -721,7 +728,7 @@ class EloBot(DiscordBot):
         Установить игровой ник определенному игроку.
         Например '!nick @ya_ne_bronze xXNagibatorXx'
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -753,7 +760,7 @@ class EloBot(DiscordBot):
         Добавить 🦀 к нику игрока.
         Например '!cancer @RagingFlamer'
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -772,7 +779,7 @@ class EloBot(DiscordBot):
         Убрать 🦀 от нику игрока.
         Например '!decancer @NotRagingFlamer'
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -801,7 +808,7 @@ class EloBot(DiscordBot):
             yield from self.update_user(
                 member, user_data, channel, check_is_conflicted=False, silent=True, is_new_data=False)
         else:
-            yield from self.clear_user_data(member, channel.server)
+            yield from self.clear_user_data(member, channel.guild)
         return was_cancer != cancer
 
     @DiscordBot.admin_action('<@упоминание>')
@@ -811,7 +818,7 @@ class EloBot(DiscordBot):
         Добавить юзера в забаненных, которых бот будет троллить
         Например '!kokoko @NotRagingFlamer'
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -832,7 +839,7 @@ class EloBot(DiscordBot):
         Убрать юзера из забаненных
         Например '!dekokoko @NotRagingFlamer'
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -852,7 +859,7 @@ class EloBot(DiscordBot):
         """
         Установить свой базовый ник (тот, что перед скобками). Если он совпадает с игровым ником, то скобок не будет.
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
@@ -897,14 +904,14 @@ class EloBot(DiscordBot):
         """
         Подтвердить свой игровой ник. Подтвежденные ники не могут быть выбраны другими людьми на данном канале
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
         yield from self.client.send_typing(mobj.channel)
-        server = self.users.get_or_create_server(mobj.channel.server.id)
+        server = self.users.get_or_create_server(mobj.channel.guild.id)
         user_data = server.get_user(mobj.author.id)
         if not user_data:
             reply = '{0}, у тебя не установлен игровой ник, используй `!nick` для этого'.format(mobj.author.mention)
@@ -941,14 +948,14 @@ class EloBot(DiscordBot):
     @DiscordBot.action('')
     @asyncio.coroutine
     def clear_elo(self, _, mobj):
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
-        self.logger.info('User \'{0}\' in {1} use !clear'.format(mobj.author.name, mobj.channel.server).encode('utf-8'))
-        yield from self.clear_user_data(mobj.author, mobj.channel.server)
+        self.logger.info('User \'{0}\' in {1} use !clear'.format(mobj.author.name, mobj.channel.guild).encode('utf-8'))
+        yield from self.clear_user_data(mobj.author, mobj.channel.guild)
         yield from self.message(mobj.channel, 'Окей, {0}, обнулил твое эло'.format(mobj.author.mention))
 
     @asyncio.coroutine
@@ -964,10 +971,10 @@ class EloBot(DiscordBot):
         conflicted_members = []
         for user in conflicted_users:
             member_id = user.discord_id
-            conflicted_member = reply_channel.server.get_member(member_id)
+            conflicted_member = reply_channel.guild.get_member(member_id)
             if conflicted_member:
                 conflicted_members.append(conflicted_member)
-                yield from self.clear_name_and_elo(conflicted_member, reply_channel.server, user)
+                yield from self.clear_name_and_elo(conflicted_member, reply_channel.guild, user)
 
         if conflicted_members and not silent:
             members_mentions = ', '.join([x.mention for x in conflicted_members])
@@ -990,13 +997,13 @@ class EloBot(DiscordBot):
         """
         Установить/Получить регион, по которому будет выставляться эло.
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)
             return
 
-        current_region = self.users.get_or_create_server(mobj.server.id).parameters.get_region().upper()
+        current_region = self.users.get_or_create_server(mobj.guild.id).parameters.get_region().upper()
         yield from self.message(mobj.channel, 'Текущий регион: `{0}`'.format(current_region))
 
     @DiscordBot.admin_action('<Регион ({0})>'.format(RiotAPI.allowed_regions))
@@ -1005,7 +1012,7 @@ class EloBot(DiscordBot):
         """
         Установить/Получить регион, по которому будет выставляться эло.
         """
-        if mobj.channel.is_private:
+        if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
             yield from self.message(mobj.channel, self.private_message_error)

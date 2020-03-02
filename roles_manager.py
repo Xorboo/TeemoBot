@@ -24,13 +24,11 @@ class RolesManager:
                 return False
         return True
 
-    @asyncio.coroutine
-    def set_user_initial_role(self, client, member):
-        role_results = yield from self.set_user_role(client, member, RiotAPI.unknown_rank)
+    async def set_user_initial_role(self, client, member):
+        role_results = await self.set_user_role(client, member, RiotAPI.unknown_rank)
         return role_results
 
-    @asyncio.coroutine
-    def set_user_role(self, client, member, role_name):
+    async def set_user_role(self, client, member, role_name):
 
         role = self.get_role(role_name)
         new_roles = self.get_new_user_roles(member.roles, role)
@@ -39,7 +37,7 @@ class RolesManager:
         try:
             if has_new_roles:
                 self.logger.info('Setting role \'%s\' for \'%s\'', role_name, member)
-                yield from member.edit(roles=new_roles, reason=f'Setting role \'{role_name}\'')
+                await member.edit(roles=new_roles, reason=f'Setting role \'{role_name}\'')
             return True, role, has_new_roles
         except discord.errors.Forbidden as e:
             self.logger.error('Error setting role: %s', e)

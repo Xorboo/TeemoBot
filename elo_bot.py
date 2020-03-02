@@ -34,11 +34,11 @@ class EloBot(DiscordBot):
     confirmation_ranks = ['diamond', 'master', 'challenger', 'grandmaster']
     rollback_rank = 'bronze'
 
-    initial_sleep_pause = 3     # Before starting autoupdate
-    success_sleep_pause = 4     # After successful update (for Discord limits)
-    small_sleep_pause = 1       # After check without update (for RiotAPI limits)
-    medium_sleep_pause = 10     # Some error happened
-    long_sleep_pause = 300      # If over-limited RiotAPI
+    initial_sleep_pause = 3  # Before starting autoupdate
+    success_sleep_pause = 4  # After successful update (for Discord limits)
+    small_sleep_pause = 1  # After check without update (for RiotAPI limits)
+    medium_sleep_pause = 10  # Some error happened
+    long_sleep_pause = 300  # If over-limited RiotAPI
 
     restricted_urls = [
         'riotworlds.com',
@@ -95,49 +95,47 @@ class EloBot(DiscordBot):
             self.client.loop.create_task(self.autoupdate_users_data())
 
     def event_ready(self):
-        @asyncio.coroutine
-        def on_ready():
+        async def on_ready():
             self.logger.info('Connection status: %s', self.client.is_ready())
 
             self.display_invite_link()
-            yield from self.set_status(self.STATUS)
+            await self.set_status(self.STATUS)
 
             for guild in self.client.guilds:
                 self.logger.info('Updating data for guild \'%s\'...', guild)
-                prune_amount = yield from guild.estimate_pruned_members(days=30)
+                prune_amount = await guild.estimate_pruned_members(days=30)
                 self.logger.info('Inactive members for the last 30 days: %s/%s.', prune_amount, len(guild.members))
                 self.emoji.update_server(guild)
-                yield from self.check_no_elo_members(guild)
+                await self.check_no_elo_members(guild)
             self.logger.info('Finished \'on_ready()\'')
+
         return on_ready
 
     @property
     def should_run_autoupdate(self):
         return not self.client.is_closed and self.autoupdate_elo
 
-    @asyncio.coroutine
-    def autoupdate_users_data(self):
+    async def autoupdate_users_data(self):
         self.logger.info('Autoupdate START')
         self.autoupdate_is_running = True
 
-        yield from self.client.wait_until_ready()
-        yield from asyncio.sleep(self.initial_sleep_pause)
+        await self.client.wait_until_ready()
+        await asyncio.sleep(self.initial_sleep_pause)
 
         while self.should_run_autoupdate:
             try:
-                yield from self.autoupdate_from_users()
-                yield from asyncio.sleep(self.success_sleep_pause)
-                yield from self.autoupdate_from_members()
-                yield from asyncio.sleep(self.success_sleep_pause)
+                await self.autoupdate_from_users()
+                await asyncio.sleep(self.success_sleep_pause)
+                await self.autoupdate_from_members()
+                await asyncio.sleep(self.success_sleep_pause)
             except Exception:
                 self.logger.error('Autoupdate loop exception: {0}'.format(traceback.format_exc()))
-                yield from asyncio.sleep(self.success_sleep_pause)
+                await asyncio.sleep(self.success_sleep_pause)
 
         self.autoupdate_is_running = False
         self.logger.info('Autoupdate STOP')
 
-    @asyncio.coroutine
-    def autoupdate_from_users(self):
+    async def autoupdate_from_users(self):
         self.logger.info('Autoupdating using USERS data')
         if len(self.client.servers) == 0:
             return
@@ -154,22 +152,23 @@ class EloBot(DiscordBot):
                     success = False
                     user_data = server_data.get_user_by_index(user_index)
                     if user_data.has_data:
-                        success = yield from self.autoupdate_user(server_data, user_data)
+                        success = await self.autoupdate_user(server_data, user_data)
                     else:
                         server, member = self.find_member_by_id(server_data.server_id, user_data.discord_id)
                         if server and member:
-                            success = yield from self.clear_user_data(member, server)
+                            success = await self.clear_user_data(member, server)
                             # Sending message only if user data was in storage,
                             # otherwise it's just a nickname with brackets, so we silently clear them
                             if success:
                                 channel = EloBot.get_bots_channel(server)
-                                yield from self.message(channel, '{0}, у тебя было что-то не так с ником, пофиксил его. '
-                                                        'Напиши `!nick` для возвращения эло.'.format(member.mention))
-                                yield from asyncio.sleep(self.success_sleep_pause)
+                                await self.message(channel, '{0}, у тебя было что-то не так с ником, пофиксил его. '
+                                                            'Напиши `!nick` для возвращения эло.'.format(
+                                    member.mention))
+                                await asyncio.sleep(self.success_sleep_pause)
 
                     if success:
-                        yield from asyncio.sleep(self.success_sleep_pause)
-                    yield from asyncio.sleep(self.small_sleep_pause)
+                        await asyncio.sleep(self.success_sleep_pause)
+                    await asyncio.sleep(self.small_sleep_pause)
 
                 except Exception:
                     self.logger.error('Autoupdate user_data exception: {0}'.format(traceback.format_exc()))
@@ -177,8 +176,7 @@ class EloBot(DiscordBot):
             server_index += 1
         self.logger.info('Autoupdating using USERS data - completed')
 
-    @asyncio.coroutine
-    def autoupdate_from_members(self):
+    async def autoupdate_from_members(self):
         self.logger.info('Autoupdating using MEMBERS data')
         if len(self.client.servers) == 0:
             return
@@ -197,23 +195,22 @@ class EloBot(DiscordBot):
                 user_data = server_data.get_user(member.id)
 
                 if user_data and user_data.has_data:
-                    success = yield from self.autoupdate_user(server_data, user_data)
+                    success = await self.autoupdate_user(server_data, user_data)
                 else:
-                    success = yield from self.clear_user_data(member, server)
+                    success = await self.clear_user_data(member, server)
                     # Sending message only if user data was in storage,
                     # otherwise it's just a nickname with brackets, so we silently clear them
                     if user_data and success:
-                        yield from self.message(channel, '{0}, у тебя было что-то не так с ником, пофиксил его. '
-                                                'Напиши `!nick` для возвращения эло.'.format(member.mention))
+                        await self.message(channel, '{0}, у тебя было что-то не так с ником, пофиксил его. '
+                                                    'Напиши `!nick` для возвращения эло.'.format(member.mention))
                 if success:
-                    yield from asyncio.sleep(self.success_sleep_pause)
-                yield from asyncio.sleep(self.small_sleep_pause)
+                    await asyncio.sleep(self.success_sleep_pause)
+                await asyncio.sleep(self.small_sleep_pause)
                 member_index += 1
             server_index += 1
         self.logger.info('Autoupdating using MEMBERS data - completed')
 
-    @asyncio.coroutine
-    def autoupdate_user(self, server_data, user, force_silent=False):
+    async def autoupdate_user(self, server_data, user, force_silent=False):
         server = self.client.get_server(server_data.server_id)
         if not server:
             return False
@@ -223,14 +220,14 @@ class EloBot(DiscordBot):
 
         is_silent = force_silent or not self.autoupdate_verbose
         channel = EloBot.get_bots_channel(server)
-        result = yield from self.update_user(
+        result = await self.update_user(
             member, user, channel, check_is_conflicted=True, silent=is_silent, is_new_data=False)
         if result.api_error:
             self.logger.error('Autoupdate request riot API error: %s', result.api_error)
             if result.api_error == 429:
-                yield from asyncio.sleep(self.long_sleep_pause)
+                await asyncio.sleep(self.long_sleep_pause)
             else:
-                yield from asyncio.sleep(self.medium_sleep_pause)
+                await asyncio.sleep(self.medium_sleep_pause)
 
         # Periodic extra save call in case we have changes
         self.users.save_users(check_if_dirty=True)
@@ -247,8 +244,7 @@ class EloBot(DiscordBot):
             return None, None
         return server, server.get_member(user_discord_id)
 
-    @asyncio.coroutine
-    def check_no_elo_members(self, s):
+    async def check_no_elo_members(self, s):
         self.logger.info('Checking for users with no elo set on server \'%s\'...', s)
         no_elo_members = []
         try:
@@ -263,7 +259,7 @@ class EloBot(DiscordBot):
                 for member in no_elo_members:
                     if current % 10 == 0:
                         self.logger.info('Setting for %s/%s...', current, total)
-                    yield from roles_manager.set_user_initial_role(self.client, member)
+                    await roles_manager.set_user_initial_role(self.client, member)
                     current += 1
                 self.logger.info('\'No elo\' set for all %s users', total)
             else:
@@ -271,29 +267,27 @@ class EloBot(DiscordBot):
         except RolesManager.RoleNotFoundException as e:
             self.logger.error('Couldnt find default role, not setting it.')
 
-    @asyncio.coroutine
-    def check_for_no_elo(self, member, roles_manager):
+    async def check_for_no_elo(self, member, roles_manager):
         if not roles_manager.has_any_role(member):
             self.logger.debug('Setting \'no_elo\' role for %s', member)
-            yield from roles_manager.set_user_initial_role(self.client, member)
+            await roles_manager.set_user_initial_role(self.client, member)
 
     def server_join(self):
-        @asyncio.coroutine
-        def on_server_join(server):
+        async def on_server_join(server):
             self.logger.info('Bot joined to the server \'%s\'', server)
             self.emoji.update_server(server)
+
         return on_server_join
 
     def server_remove(self):
-        @asyncio.coroutine
-        def on_server_remove(server):
+        async def on_server_remove(server):
             self.logger.info('Bot left the server \'%s\'', server)
             self.emoji.remove_server(server)
+
         return on_server_remove
 
     def event_join(self):
-        @asyncio.coroutine
-        def on_member_join(member):
+        async def on_member_join(member):
             self.logger.info('User \'%s\' joined to the server \'%s\'', member.name, member.guild)
             guild = member.guild
 
@@ -301,7 +295,7 @@ class EloBot(DiscordBot):
             user_data = server_data.get_user(member.id)
             success = False
             if user_data:
-                success = yield from self.autoupdate_user(server_data, user_data, force_silent=True)
+                success = await self.autoupdate_user(server_data, user_data, force_silent=True)
             # Force user to have default gray role
 
             if success:
@@ -310,17 +304,17 @@ class EloBot(DiscordBot):
                 if not rank_text:
                     rank_text = user_data.rank
                 msg = 'Привет {0.mention}! Опять ты выходишь на связь? Поставил тебе {1}'.format(member, rank_text)
-                yield from self.message(guild, msg)
+                await self.message(guild, msg)
             else:
-                yield from self.welcome_default(member)
+                await self.welcome_default(member)
+
         return on_member_join
 
-    @asyncio.coroutine
-    def welcome_default(self, member):
+    async def welcome_default(self, member):
         guild = member.guild
         try:
             roles_manager = RolesManager(guild.roles)
-            role_results = yield from roles_manager.set_user_initial_role(self.client, member)
+            role_results = await roles_manager.set_user_initial_role(self.client, member)
             success = role_results[0]
             if not success:
                 self.logger.error('Cant set initial role for user \'%s\' (forbidden)', member)
@@ -332,11 +326,10 @@ class EloBot(DiscordBot):
               'Так же есть `!base` для установки первой части ника, и вообще смотри в `!help`'
         em = self.emoji.s(guild)
         text = fmt.format(member, em.poro, self.get_basic_hint(guild.id), em.kappa)
-        yield from self.message(guild, text)
+        await self.message(guild, text)
 
     @DiscordBot.owner_action('<new RiotAPI key>')
-    @asyncio.coroutine
-    def riot_key(self, args, mobj):
+    async def riot_key(self, args, mobj):
         """
         Установить новый RiotAPI ключ.
         Получить его можно по ссылке: https://developer.riotgames.com/
@@ -346,15 +339,14 @@ class EloBot(DiscordBot):
         self.parameters_data["riot_api_key"] = new_key
         self.riot_api.api_key = new_key
         self.save_parameters()
-        yield from self.message(mobj.channel, 'Окей {0}, обновил ключ RiotAPI'.format(mobj.author.mention))
+        await self.message(mobj.channel, 'Окей {0}, обновил ключ RiotAPI'.format(mobj.author.mention))
         if isinstance(mobj.channel, PrivateChannel):
-            yield from self.message(mobj.channel, 'Удали свое сообщение с ключом, на всякий случай.')
+            await self.message(mobj.channel, 'Удали свое сообщение с ключом, на всякий случай.')
         else:
-            yield from self.client.delete_message(mobj)
+            await self.client.delete_message(mobj)
 
     @DiscordBot.owner_action('')
-    @asyncio.coroutine
-    def autoupdate(self, _, mobj):
+    async def autoupdate(self, _, mobj):
         """
         Включить/Выключить автообновление эло у игроков
         """
@@ -364,12 +356,11 @@ class EloBot(DiscordBot):
         self.save_parameters()
         self.launch_autoupdate_task()
 
-        yield from self.message(mobj.channel, 'Окей {0}, автообновление теперь `{1}`'
-                                .format(mobj.author.mention, 'Включено' if self.autoupdate_elo else 'Выключено'))
+        await self.message(mobj.channel, 'Окей {0}, автообновление теперь `{1}`'
+                           .format(mobj.author.mention, 'Включено' if self.autoupdate_elo else 'Выключено'))
 
     @DiscordBot.owner_action('')
-    @asyncio.coroutine
-    def autoupdate_verbose(self, _, mobj):
+    async def autoupdate_verbose(self, _, mobj):
         """
         Включить/Выключить сообщения в чат при автообновлении эло
         """
@@ -380,12 +371,11 @@ class EloBot(DiscordBot):
         self.save_parameters()
         self.launch_autoupdate_task()
 
-        yield from self.message(mobj.channel, 'Окей {0}, сообщения при автообновлении теперь `{1}`'
-                                .format(mobj.author.mention, 'Включены' if self.autoupdate_verbose else 'Выключены'))
+        await self.message(mobj.channel, 'Окей {0}, сообщения при автообновлении теперь `{1}`'
+                           .format(mobj.author.mention, 'Включены' if self.autoupdate_verbose else 'Выключены'))
 
     @DiscordBot.action('<Команда>')
-    @asyncio.coroutine
-    def help(self, args, mobj):
+    async def help(self, args, mobj):
         """
         Правда? Тебе нужен мануал по мануалу? Свсм упрлс?
         """
@@ -398,30 +388,30 @@ class EloBot(DiscordBot):
                     command_help = ' ' + command_help
                 command_doc = self.ACTIONS[key].__doc__
                 text = self.pre_text('Подсказка для \'{0}{1}\':{2}'.format(key, command_help, command_doc))
-                msg = yield from self.message(mobj.channel, text)
+                msg = await self.message(mobj.channel, text)
                 return msg
             else:
                 self.logger.info('No help for key \'%s\' found', key)
 
         self.logger.info('Sending generic help')
         prefix = '# Доступные команды:\n\n'
-        postfix = '\nВведи \'{0}help <command>\' для получения большей инфы по каждой команде.'\
+        postfix = '\nВведи \'{0}help <command>\' для получения большей инфы по каждой команде.' \
             .format(DiscordBot.PREFIX)
 
         full_text = self.get_help_string(prefix, postfix, self.ACTIONS)
-        yield from self.message(mobj.channel, full_text)
+        await self.message(mobj.channel, full_text)
 
         if self.is_admin(mobj.author):
             self.logger.info('Sending admin commands help to %s', mobj.author)
             prefix = '# Доступные админские команды:\n\n'
             full_text = self.get_help_string(prefix, postfix, self.ADMIN_ACTIONS)
-            yield from self.message(mobj.author, full_text)
+            await self.message(mobj.author, full_text)
 
         if self.is_owner(mobj.author):
             self.logger.info('Sending owner commands help to %s', mobj.author)
             prefix = '# Доступные команды владельца:\n\n'
             full_text = self.get_help_string(prefix, postfix, self.OWNER_ACTIONS)
-            yield from self.message(mobj.author, full_text)
+            await self.message(mobj.author, full_text)
 
     def get_help_string(self, prefix, postfix, dictionary):
         output = prefix
@@ -431,24 +421,22 @@ class EloBot(DiscordBot):
         return self.pre_text(output)
 
     @DiscordBot.message_listener()
-    @asyncio.coroutine
-    def on_message(self, mobj):
-        yield from self.check_spam_message(mobj)
+    async def on_message(self, mobj):
+        await self.check_spam_message(mobj)
 
         # Troll member if user is banned
         author = mobj.author
         if self.users.is_member_banned(author.id):
             reply = Answers.get_banned_trolling()
-            yield from self.message(mobj.channel, reply.format(author.mention))
+            await self.message(mobj.channel, reply.format(author.mention))
 
-    @asyncio.coroutine
-    def check_spam_message(self, mobj):
+    async def check_spam_message(self, mobj):
         url_regex = r"""(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))"""
         urls = re.findall(url_regex, mobj.content)
         if urls:
             if RolesManager.has_no_role(mobj.author):
                 self.logger.info('Deleting spam: no-role user \'%s\' posted a url \'%s\'', mobj.author, ', '.join(urls))
-                yield from self.delete_spam_message(mobj, True, add_cancer=False)
+                await self.delete_spam_message(mobj, True, add_cancer=False)
             else:
                 has_restricted_url = False
                 for url in urls:
@@ -461,25 +449,23 @@ class EloBot(DiscordBot):
                         break
                 if has_restricted_url:
                     self.logger.info('Deleting spam: user \'%s\' posted a url \'%s\'', mobj.author, ', '.join(urls))
-                    yield from self.delete_spam_message(mobj, True, add_cancer=True)
+                    await self.delete_spam_message(mobj, True, add_cancer=True)
 
-    @asyncio.coroutine
-    def delete_spam_message(self, mobj, add_reply, add_cancer=True):
-        yield from self.client.delete_message(mobj)
+    async def delete_spam_message(self, mobj, add_reply, add_cancer=True):
+        await self.client.delete_message(mobj)
         if add_reply:
             reply = 'Ну что же ты, {0}, спамишь всякими подозрительными линками? ' \
                     'Смотри, забанят за такое чего доброго...'.format(mobj.author.mention)
-            yield from self.message(mobj.channel, reply)
+            await self.message(mobj.channel, reply)
         if add_cancer:
-            yield from self.set_cancer(mobj.author, mobj.channel, True, add_reply)
+            await self.set_cancer(mobj.author, mobj.channel, True, add_reply)
 
-    @asyncio.coroutine
-    def change_member_nickname(self, member, new_name):
+    async def change_member_nickname(self, member, new_name):
         if new_name != member.display_name:
             try:
                 self.logger.info('Changing nickname from \'{0}\' to \'{1}\' for \'{2}\''
                                  .format(member.display_name, new_name, member).encode('utf-8'))
-                yield from member.edit(nick=new_name, reason=f'Changing nickname to \'{new_name}\'')
+                await member.edit(nick=new_name, reason=f'Changing nickname to \'{new_name}\'')
                 return True, True
             except discord.errors.Forbidden as e:
                 self.logger.error('Error setting nickname: %s', e)
@@ -488,13 +474,13 @@ class EloBot(DiscordBot):
             self.logger.debug('Not changing nickname to \'{0}\' for \'{1}\''.format(new_name, member).encode('utf-8'))
             return True, False
 
-    @asyncio.coroutine
-    def update_user(self, member, user, channel, check_is_conflicted=False, silent=False, is_new_data=True):
+    async def update_user(self, member, user, channel, check_is_conflicted=False, silent=False, is_new_data=True):
         result = types.SimpleNamespace()
         result.rank = result.name = False
         result.api_error = None
 
-        self.logger.debug('Update member {0} with game name {1} from channel {2}'.format(member, user.nickname, channel))
+        self.logger.debug(
+            'Update member {0} with game name {1} from channel {2}'.format(member, user.nickname, channel))
         mention = member.mention
         old_rank = user.rank.lower()
         try:
@@ -510,9 +496,9 @@ class EloBot(DiscordBot):
                 if confirmed_user:
                     if confirmed_user.discord_id != user.discord_id:
                         if not silent:
-                            error_reply = 'Не могу поставить тебе ник `{0}`, {1}, он уже занят за <@!{2}>'\
+                            error_reply = 'Не могу поставить тебе ник `{0}`, {1}, он уже занят за <@!{2}>' \
                                 .format(nickname, mention, confirmed_user.discord_id)
-                            yield from self.message(channel, error_reply)
+                            await self.message(channel, error_reply)
                         return result
 
                 # Changing game nickname - 'unconfirming' user
@@ -525,19 +511,20 @@ class EloBot(DiscordBot):
                     self.logger.debug('User {0} requested {1} using nickname \'{2}\', putting him to {3}'
                                       .format(member, rank, nickname, EloBot.rollback_rank).encode('utf-8'))
                     required_hash = UserData.create_hash(summoner_id, member.id)
-                    is_hash_correct, current_code = self.riot_api.check_user_verification(summoner_id, required_hash, region)
+                    is_hash_correct, current_code = self.riot_api.check_user_verification(summoner_id, required_hash,
+                                                                                          region)
                     if is_hash_correct:
                         self.logger.debug('User {0} already has correct hash, confirming it'.format(member))
-                        yield from self.confirm_user(user, server, member, channel, silent=silent)
+                        await self.confirm_user(user, server, member, channel, silent=silent)
                     else:
                         self.logger.debug('User {0} is not confirmed, setting default rank'.format(member))
                         rank = EloBot.rollback_rank.lower()
                         if not silent and (is_new_data or rank != old_rank):
                             confirm_reply = '{0}, если ты правда с хай-эло - выставь `{1}` в коде верификации ' \
                                             '(`Настройки->About->Verification` в клиенте) и подтверди свой ник ' \
-                                            'командой `!confirm`. А пока что будешь с таким рангом :3'\
+                                            'командой `!confirm`. А пока что будешь с таким рангом :3' \
                                 .format(mention, required_hash)
-                            yield from self.message(channel, confirm_reply)
+                            await self.message(channel, confirm_reply)
             rank_changed = rank != old_rank
 
             # Saving user to database
@@ -545,7 +532,7 @@ class EloBot(DiscordBot):
 
             # Updating users role on server
             roles_manager = RolesManager(channel.guild.roles)
-            role_success, new_role, roles_changed = yield from roles_manager.set_user_role(self.client, member, rank)
+            role_success, new_role, roles_changed = await roles_manager.set_user_role(self.client, member, rank)
             result.rank = rank_changed or roles_changed
 
             # Updating user nickname
@@ -553,7 +540,7 @@ class EloBot(DiscordBot):
             new_name = nick_manager.get_combined_nickname(member, user)
             nick_success = True
             if new_name:
-                nick_success, has_new_nickname = yield from self.change_member_nickname(member, new_name)
+                nick_success, has_new_nickname = await self.change_member_nickname(member, new_name)
                 result.name = has_new_nickname
 
             # Replying
@@ -573,10 +560,10 @@ class EloBot(DiscordBot):
 
                         # Form a reply
                         if rank_changed:
-                            answer = '{0}, твое эло изменилось [{1} -> {2}]'\
+                            answer = '{0}, твое эло изменилось [{1} -> {2}]' \
                                 .format(member.mention, rank_old_text, rank_new_text)
                         else:
-                            answer = 'Эй {0}, вернулся к нам на канал? Выставил тебе твой ранк {1}'\
+                            answer = 'Эй {0}, вернулся к нам на канал? Выставил тебе твой ранк {1}' \
                                 .format(member.mention, rank_new_text)
                     if answer:
                         if not user.is_confirmed:
@@ -584,63 +571,62 @@ class EloBot(DiscordBot):
                                      '(`Настройки->About->Verification` в клиенте) на `{1}` ' \
                                      'и подтвердить свой ник командой `!confirm`, ' \
                                      'чтобы никто на канале его не занял'.format(answer, user.bind_hash)
-                        yield from self.message(channel, answer)
+                        await self.message(channel, answer)
                 else:
-                    yield from self.message(channel,
-                                            'Эй, {0}, у меня недостаточно прав чтобы выставить твою роль, '
-                                            'скажи админу чтобы перетащил мою роль выше остальных.'.format(mention))
+                    await self.message(channel,
+                                       'Эй, {0}, у меня недостаточно прав чтобы выставить твою роль, '
+                                       'скажи админу чтобы перетащил мою роль выше остальных.'.format(mention))
 
                 if not nick_success:
                     nick_error_reply = '{0}, поменяй себе ник на `{1}` сам, у меня прав нет.'.format(mention, new_name)
-                    yield from self.message(channel, nick_error_reply)
+                    await self.message(channel, nick_error_reply)
 
         except RiotAPI.UserIdNotFoundException as _:
             api_working = self.check_api_if_needed()
             if api_working:
                 requested_nickname = user.nickname
-                yield from self.clear_user_data(member, channel.guild)
+                await self.clear_user_data(member, channel.guild)
                 if not silent:
                     if is_new_data:
-                        error_reply = '{0}, ты рак, нет такого ника `{1}` в лиге на `{2}`. '\
+                        error_reply = '{0}, ты рак, нет такого ника `{1}` в лиге на `{2}`. ' \
                             .format(member.mention, requested_nickname, region.upper())
                     else:
-                        error_reply = '{0}, не нашел твоего ника `{1}` при обновлении, очистил твои данные'\
+                        error_reply = '{0}, не нашел твоего ника `{1}` при обновлении, очистил твои данные' \
                             .format(member.mention, requested_nickname)
-                    yield from self.message(channel, error_reply)
+                    await self.message(channel, error_reply)
             else:
                 if not silent and is_new_data:
                     api_url = 'https://developer.riotgames.com/api-status/'
-                    yield from self.message(channel,
-                                            '{0}, судя по всему рито сломали их API. '
-                                            'Проверь тут ({1}), если все в порядке - напиши о проблеме `{2}` ({3}). '
-                                            'Но вообще я и сам ему напишу...'
-                                            .format(member.mention, api_url, self.owner, self.owner.mention))
-                    yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
-                                                        'а АПИ лежит...'.format(channel.guild, member, user.nickname))
+                    await self.message(channel,
+                                       '{0}, судя по всему рито сломали их API. '
+                                       'Проверь тут ({1}), если все в порядке - напиши о проблеме `{2}` ({3}). '
+                                       'Но вообще я и сам ему напишу...'
+                                       .format(member.mention, api_url, self.owner, self.owner.mention))
+                    await self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
+                                                   'а АПИ лежит...'.format(channel.guild, member, user.nickname))
 
         except RiotAPI.RiotRequestException as e:
             result.api_error = e.error_code
             if not silent and is_new_data:
                 error_reply = '{0}, произошла ошибка при запросе к RiotAPI, попробуй попозже.'.format(member.mention)
-                yield from self.message(channel, error_reply)
+                await self.message(channel, error_reply)
 
         except RolesManager.RoleNotFoundException as _:
             if not silent and is_new_data:
-                yield from self.message(channel,
-                                        'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
-                                        'Скажи админу чтобы добавил роль `{1}`'.format(mention, rank))
+                await self.message(channel,
+                                   'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
+                                   'Скажи админу чтобы добавил роль `{1}`'.format(mention, rank))
         return result
 
-    @asyncio.coroutine
-    def change_lol_nickname(self, member, nickname, channel):
+    async def change_lol_nickname(self, member, nickname, channel):
         self.logger.info('Recieved !nick command for \'{0}\' on \'{1}\''.format(nickname, channel.guild)
                          .encode('utf-8'))
 
         if not nickname:
-            yield from self.message(channel, 'Ник то напиши после `!nick`, ну...')
+            await self.message(channel, 'Ник то напиши после `!nick`, ну...')
             return
 
-        yield from channel.trigger_typing()
+        await channel.trigger_typing()
 
         # Setting new nickname - clearing user data before update
         user = self.users.get_or_create_user(member)
@@ -649,11 +635,10 @@ class EloBot(DiscordBot):
             user.nickname = nickname
             user.confirmed = False
 
-        yield from self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
+        await self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
 
     @DiscordBot.action('<Ник_в_игре>')
-    @asyncio.coroutine
-    def nick(self, args, mobj):
+    async def nick(self, args, mobj):
         """
         Установить свой игровой ник и эло, чтобы людям было проще тебя найти в игре.
         Например '!nick xXNagibatorXx'
@@ -661,15 +646,14 @@ class EloBot(DiscordBot):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
         nickname = ' '.join(args).strip()
-        yield from self.change_lol_nickname(mobj.author, nickname, mobj.channel)
+        await self.change_lol_nickname(mobj.author, nickname, mobj.channel)
 
     @DiscordBot.action('<Ник_в_игре>')
-    @asyncio.coroutine
-    def elo(self, args, mobj):
+    async def elo(self, args, mobj):
         """
         Проверить эло кого-нибудь.
         Например '!elo xXNagibatorXx'
@@ -677,7 +661,7 @@ class EloBot(DiscordBot):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
         try:
@@ -694,36 +678,35 @@ class EloBot(DiscordBot):
             if not rank_text:
                 rank_text = rank
             reply = '{0}, у `{1}` эло: {2}'.format(member.mention, real_nickname, rank_text)
-            yield from self.message(channel, reply)
+            await self.message(channel, reply)
 
         except RiotAPI.UserIdNotFoundException as _:
             api_working = self.check_api_if_needed()
             if api_working:
                 error_reply = '{0}, ты рак, нет такого ника `{1}` в лиге на `{2}`. ' \
                     .format(member.mention, nickname, region.upper())
-                yield from self.message(channel, error_reply)
+                await self.message(channel, error_reply)
             else:
                 api_url = 'https://developer.riotgames.com/api-status/'
-                yield from self.message(channel,
-                                        '{0}, судя по всему рито сломали их API. '
-                                        'Проверь тут ({1}), если все в порядке - напиши о проблеме `{2}` ({3}). '
-                                        'Но вообще я и сам ему напишу...'
-                                        .format(member.mention, api_url, self.owner, self.owner.mention))
-                yield from self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
-                                                    'а АПИ лежит...'.format(channel.guild, member, nickname))
+                await self.message(channel,
+                                   '{0}, судя по всему рито сломали их API. '
+                                   'Проверь тут ({1}), если все в порядке - напиши о проблеме `{2}` ({3}). '
+                                   'Но вообще я и сам ему напишу...'
+                                   .format(member.mention, api_url, self.owner, self.owner.mention))
+                await self.message(self.owner, 'Тут на `{0}` юзер `{1}` пытается установить себе ник `{2}`, '
+                                               'а АПИ лежит...'.format(channel.guild, member, nickname))
 
         except RiotAPI.RiotRequestException as e:
             error_reply = '{0}, произошла ошибка при запросе к RiotAPI, попробуй попозже.'.format(member.mention)
-            yield from self.message(channel, error_reply)
+            await self.message(channel, error_reply)
 
         except RolesManager.RoleNotFoundException as _:
-            yield from self.message(channel,
-                                    'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
-                                    'Скажи админу чтобы добавил роль `{1}`'.format(member.mention, rank))
+            await self.message(channel,
+                               'Упс, тут на сервере роли не настроены, не получится тебе роль поставить, {0}. '
+                               'Скажи админу чтобы добавил роль `{1}`'.format(member.mention, rank))
 
     @DiscordBot.admin_action('<@упоминание> <Ник_в_игре>')
-    @asyncio.coroutine
-    def force(self, args, mobj):
+    async def force(self, args, mobj):
         """
         Установить игровой ник определенному игроку.
         Например '!nick @ya_ne_bronze xXNagibatorXx'
@@ -731,31 +714,30 @@ class EloBot(DiscordBot):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
         if len(args) < 2:
-            yield from self.message(mobj.channel, 'Укажи @юзера и его ник, смотри !help.')
+            await self.message(mobj.channel, 'Укажи @юзера и его ник, смотри !help.')
             return
 
         if not mobj.mentions:
-            yield from self.message(mobj.channel, 'Укажи @юзера, которому поставить ник.')
+            await self.message(mobj.channel, 'Укажи @юзера, которому поставить ник.')
             return
 
         user = mobj.mentions[0]
         mention_text = args[0]
         if mention_text != user.mention:
-            yield from self.message(mobj.channel, '@юзер должен идти первым, смотри !help.')
+            await self.message(mobj.channel, '@юзер должен идти первым, смотри !help.')
             return
 
         nickname = ' '.join(args[1:]).strip()
         self.logger.info('Force setting nickname \'{0}\' to user \'{1}\', admin: \'{2}\''
                          .format(nickname, user, mobj.author).encode('utf-8'))
-        yield from self.change_lol_nickname(user, nickname, mobj.channel)
+        await self.change_lol_nickname(user, nickname, mobj.channel)
 
     @DiscordBot.admin_action('<@упоминание>')
-    @asyncio.coroutine
-    def cancer(self, _, mobj):
+    async def cancer(self, _, mobj):
         """
         Добавить 🦀 к нику игрока.
         Например '!cancer @RagingFlamer'
@@ -763,18 +745,17 @@ class EloBot(DiscordBot):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
         if not mobj.mentions:
-            yield from self.message(mobj.channel, 'Укажи @рака.')
+            await self.message(mobj.channel, 'Укажи @рака.')
             return
 
         member = mobj.mentions[0]
-        yield from self.set_cancer(member, mobj.channel, True)
+        await self.set_cancer(member, mobj.channel, True)
 
     @DiscordBot.admin_action('<@упоминание>')
-    @asyncio.coroutine
-    def decancer(self, _, mobj):
+    async def decancer(self, _, mobj):
         """
         Убрать 🦀 от нику игрока.
         Например '!decancer @NotRagingFlamer'
@@ -782,38 +763,35 @@ class EloBot(DiscordBot):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
         if not mobj.mentions:
-            yield from self.message(mobj.channel, 'Укажи @рака.')
+            await self.message(mobj.channel, 'Укажи @рака.')
             return
 
         member = mobj.mentions[0]
-        yield from self.set_cancer(member, mobj.channel, False)
+        await self.set_cancer(member, mobj.channel, False)
 
-    @asyncio.coroutine
-    def set_cancer(self, member, channel, is_cancer, add_reply=True):
-        cancer_changed = yield from self.change_user_cancer(member, channel, is_cancer)
+    async def set_cancer(self, member, channel, is_cancer, add_reply=True):
+        cancer_changed = await self.change_user_cancer(member, channel, is_cancer)
         if cancer_changed and add_reply:
             reply = 'Лол, {0}, ну ты и рак все же.' if is_cancer else 'Хм, {0}, ну наверное ты больше не рак.'
-            yield from self.message(channel, reply.format(member.mention))
+            await self.message(channel, reply.format(member.mention))
         return cancer_changed
 
-    @asyncio.coroutine
-    def change_user_cancer(self, member, channel, cancer):
+    async def change_user_cancer(self, member, channel, cancer):
         user_data = self.users.get_or_create_user(member)
         was_cancer = user_data.is_cancer
         user_data.cancer = cancer
         if user_data.has_data:
-            yield from self.update_user(
+            await self.update_user(
                 member, user_data, channel, check_is_conflicted=False, silent=True, is_new_data=False)
         else:
-            yield from self.clear_user_data(member, channel.guild)
+            await self.clear_user_data(member, channel.guild)
         return was_cancer != cancer
 
     @DiscordBot.admin_action('<@упоминание>')
-    @asyncio.coroutine
-    def kokoko(self, _, mobj):
+    async def kokoko(self, _, mobj):
         """
         Добавить юзера в забаненных, которых бот будет троллить
         Например '!kokoko @NotRagingFlamer'
@@ -821,20 +799,19 @@ class EloBot(DiscordBot):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
         if not mobj.mentions:
-            yield from self.message(mobj.channel, 'Укажи @петушка.')
+            await self.message(mobj.channel, 'Укажи @петушка.')
             return
 
         member = mobj.mentions[0]
         self.users.set_member_ban(member.id, True)
         reply = 'Лол, а {0} у нас то петушок оказывается.'
-        yield from self.message(mobj.channel, reply.format(member.mention))
+        await self.message(mobj.channel, reply.format(member.mention))
 
     @DiscordBot.admin_action('<@упоминание>')
-    @asyncio.coroutine
-    def dekokoko(self, _, mobj):
+    async def dekokoko(self, _, mobj):
         """
         Убрать юзера из забаненных
         Например '!dekokoko @NotRagingFlamer'
@@ -842,27 +819,26 @@ class EloBot(DiscordBot):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
         if not mobj.mentions:
-            yield from self.message(mobj.channel, 'Укажи @петушка.')
+            await self.message(mobj.channel, 'Укажи @петушка.')
             return
 
         member = mobj.mentions[0]
         self.users.set_member_ban(member.id, False)
         reply = 'Я все равно считаю, что {0} знатный петушок.'
-        yield from self.message(mobj.channel, reply.format(member.mention))
+        await self.message(mobj.channel, reply.format(member.mention))
 
     @DiscordBot.action('<Базовый_Ник>')
-    @asyncio.coroutine
-    def base(self, args, mobj):
+    async def base(self, args, mobj):
         """
         Установить свой базовый ник (тот, что перед скобками). Если он совпадает с игровым ником, то скобок не будет.
         """
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
         user_data = self.users.get_user(mobj.author)
@@ -876,146 +852,137 @@ class EloBot(DiscordBot):
             new_name = NicknamesManager.create_full_name(base_name, game_name)
         else:
             new_name = base_name
-        nick_success, has_new_nickname = yield from self.change_member_nickname(mobj.author, new_name)
+        nick_success, has_new_nickname = await self.change_member_nickname(mobj.author, new_name)
 
         mention = mobj.author.mention
         if nick_success:
-            yield from self.message(mobj.channel, 'Окей, {0}, поменял тебе ник.'.format(mention))
+            await self.message(mobj.channel, 'Окей, {0}, поменял тебе ник.'.format(mention))
         else:
-            yield from self.message(mobj.channel,
-                                    '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
+            await self.message(mobj.channel,
+                               '{0}, поменяй себе ник на \'{1}\' сам, у меня прав нет.'.format(mention, new_name))
 
     @DiscordBot.action('')
-    @asyncio.coroutine
-    def update(self, _, mobj):
+    async def update(self, _, mobj):
         channel = mobj.channel
-        yield from self.client.send_typing(channel)
+        await self.client.send_typing(channel)
 
         member = mobj.author
         user = self.users.get_user(member)
         if user and user.has_data:
-            yield from self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
+            await self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
         else:
-            yield from self.message(channel, 'Сначала поставь себе ник через `!nick`, {0}'.format(member.mention))
+            await self.message(channel, 'Сначала поставь себе ник через `!nick`, {0}'.format(member.mention))
 
     @DiscordBot.action('')
-    @asyncio.coroutine
-    def confirm(self, _, mobj):
+    async def confirm(self, _, mobj):
         """
         Подтвердить свой игровой ник. Подтвежденные ники не могут быть выбраны другими людьми на данном канале
         """
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
-        yield from self.client.send_typing(mobj.channel)
+        await self.client.send_typing(mobj.channel)
         server = self.users.get_or_create_server(mobj.channel.guild.id)
         user_data = server.get_user(mobj.author.id)
         if not user_data:
             reply = '{0}, у тебя не установлен игровой ник, используй `!nick` для этого'.format(mobj.author.mention)
-            yield from self.message(mobj.channel, reply)
+            await self.message(mobj.channel, reply)
             return
 
         bind_hash = user_data.bind_hash
         region = server.parameters.get_region()
         if not user_data.game_id:
-            yield from self.message(mobj.channel, 'У тебя устаревшие данные, выполни сначала команду `!nick`'
-                                    .format(mobj.author.mention))
+            await self.message(mobj.channel, 'У тебя устаревшие данные, выполни сначала команду `!nick`'
+                               .format(mobj.author.mention))
             return
 
         has_correct_code, current_code = self.riot_api.check_user_verification(user_data.game_id, bind_hash, region)
         if has_correct_code:
-            yield from self.confirm_user(user_data, server, mobj.author, mobj.channel)
+            await self.confirm_user(user_data, server, mobj.author, mobj.channel)
         else:
             fail_reply = '{0}, поменяй код верификации (`Настройки->About->Verification` в клиенте) на `{1}` ' \
                          'для подтверждения, подожди минуту (он иногда тормозит) и повтори команду. ' \
                          'Сейчас у тебя стоит код `{2}`'.format(mobj.author.mention, bind_hash, current_code)
-            yield from self.message(mobj.channel, fail_reply)
+            await self.message(mobj.channel, fail_reply)
 
-    @asyncio.coroutine
-    def confirm_user(self, user_data, server, author, channel, silent=False):
+    async def confirm_user(self, user_data, server, author, channel, silent=False):
         conflicted_users = self.users.confirm_user(user_data, server)
-        yield from self.update_user(author, user_data, channel, check_is_conflicted=False, silent=True)
+        await self.update_user(author, user_data, channel, check_is_conflicted=False, silent=True)
 
         if not silent:
-            success_reply = 'Окей {0}, подтвердил твой игровой ник `{1}`'\
+            success_reply = 'Окей {0}, подтвердил твой игровой ник `{1}`' \
                 .format(author.mention, user_data.nickname)
-            yield from self.message(channel, success_reply)
-        yield from self.remove_conflicted_members(conflicted_users, channel, silent)
+            await self.message(channel, success_reply)
+        await self.remove_conflicted_members(conflicted_users, channel, silent)
 
     @DiscordBot.action('')
-    @asyncio.coroutine
-    def clear_elo(self, _, mobj):
+    async def clear_elo(self, _, mobj):
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
         self.logger.info('User \'{0}\' in {1} use !clear'.format(mobj.author.name, mobj.channel.guild).encode('utf-8'))
-        yield from self.clear_user_data(mobj.author, mobj.channel.guild)
-        yield from self.message(mobj.channel, 'Окей, {0}, обнулил твое эло'.format(mobj.author.mention))
+        await self.clear_user_data(mobj.author, mobj.channel.guild)
+        await self.message(mobj.channel, 'Окей, {0}, обнулил твое эло'.format(mobj.author.mention))
 
-    @asyncio.coroutine
-    def clear_user_data(self, member, server):
+    async def clear_user_data(self, member, server):
         user_data = self.users.clear_user(member)
-        user_cleared = yield from self.clear_name_and_elo(member, server, user_data)
+        user_cleared = await self.clear_name_and_elo(member, server, user_data)
         if user_cleared:
             self.logger.info('Cleared data for user %s', member)
         return user_cleared
 
-    @asyncio.coroutine
-    def remove_conflicted_members(self, conflicted_users, reply_channel, silent=False):
+    async def remove_conflicted_members(self, conflicted_users, reply_channel, silent=False):
         conflicted_members = []
         for user in conflicted_users:
             member_id = user.discord_id
             conflicted_member = reply_channel.guild.get_member(member_id)
             if conflicted_member:
                 conflicted_members.append(conflicted_member)
-                yield from self.clear_name_and_elo(conflicted_member, reply_channel.guild, user)
+                await self.clear_name_and_elo(conflicted_member, reply_channel.guild, user)
 
         if conflicted_members and not silent:
             members_mentions = ', '.join([x.mention for x in conflicted_members])
             conflict_reply = '{0}: очистил эло, зачем чужие ники юзать, а?'.format(members_mentions)
-            yield from self.message(reply_channel, conflict_reply)
+            await self.message(reply_channel, conflict_reply)
 
-    @asyncio.coroutine
-    def clear_name_and_elo(self, member, server, user_data=None):
+    async def clear_name_and_elo(self, member, server, user_data=None):
         roles_manager = RolesManager(server.roles)
-        role_results = yield from roles_manager.set_user_initial_role(self.client, member)
+        role_results = await roles_manager.set_user_initial_role(self.client, member)
         has_new_roles = role_results[2]
 
         clean_name = NicknamesManager.get_base_name(member, user_data)
-        nick_success, has_new_nickname = yield from self.change_member_nickname(member, clean_name)
+        nick_success, has_new_nickname = await self.change_member_nickname(member, clean_name)
         return has_new_roles or (nick_success and has_new_nickname)
 
     @DiscordBot.action()
-    @asyncio.coroutine
-    def region(self, _, mobj):
+    async def region(self, _, mobj):
         """
         Установить/Получить регион, по которому будет выставляться эло.
         """
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
         current_region = self.users.get_or_create_server(mobj.guild.id).parameters.get_region().upper()
-        yield from self.message(mobj.channel, 'Текущий регион: `{0}`'.format(current_region))
+        await self.message(mobj.channel, 'Текущий регион: `{0}`'.format(current_region))
 
     @DiscordBot.admin_action('<Регион ({0})>'.format(RiotAPI.allowed_regions))
-    @asyncio.coroutine
-    def set_region(self, args, mobj):
+    async def set_region(self, args, mobj):
         """
         Установить/Получить регион, по которому будет выставляться эло.
         """
         if isinstance(mobj.channel, PrivateChannel):
             self.logger.info('User \'{0}\' sent private message \'{1}\''
                              .format(mobj.author.name, mobj.content).encode('utf-8'))
-            yield from self.message(mobj.channel, self.private_message_error)
+            await self.message(mobj.channel, self.private_message_error)
             return
 
         if len(args) == 1:
@@ -1023,23 +990,22 @@ class EloBot(DiscordBot):
             self.logger.info('Recieved !region command for \'%s\' on %s', region, mobj.server.name)
 
             if self.users.set_server_region(mobj.server.id, region):
-                yield from self.message(mobj.channel, 'Установил регион `{0}` на сервере.'.format(region.upper()))
+                await self.message(mobj.channel, 'Установил регион `{0}` на сервере.'.format(region.upper()))
             else:
-                yield from self.message(mobj.channel,
-                                        self.region_set_error + ', `{0}` не подходит'.format(region.upper()))
+                await self.message(mobj.channel,
+                                   self.region_set_error + ', `{0}` не подходит'.format(region.upper()))
         else:
-            yield from self.message(mobj.channel, self.region_set_error)
+            await self.message(mobj.channel, self.region_set_error)
             return
 
     @DiscordBot.owner_action('')
-    @asyncio.coroutine
-    def halt(self, _, mobj):
+    async def halt(self, _, mobj):
         """
         Reboot the bot entirely
         """
         self.logger.info('Owner \'%s\' called full reboot, closing the program.', mobj.author)
-        yield from self.message(mobj.channel, 'Слушаюсь, милорд.')
-        yield from self.client.close()
+        await self.message(mobj.channel, 'Слушаюсь, милорд.')
+        await self.client.close()
 
     def check_api_if_needed(self):
         current_time = time.time()

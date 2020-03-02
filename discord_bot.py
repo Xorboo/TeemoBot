@@ -106,14 +106,8 @@ class DiscordBot:
     def __init__(self, parameters_json):
         self.client = Client()
         # self.token = DiscordBot.load_token(token_file_path)
-        self.token = parameters_json["token"]
-        self.owner_id = parameters_json["owner_id"]
-        self.owner = discord.User(state=None, data={
-            'username': 'Xorboo',
-            'id': self.owner_id,
-            'discriminator': 6178,
-            'avatar': None
-        })
+        self.token = parameters_json['token']
+        self.owner_id = parameters_json['owner_id']
 
     @property
     def token_is_valid(self):
@@ -131,8 +125,7 @@ class DiscordBot:
                                     'create file with the token key in \'%s\', error: %s', token_file_path, e)
         return token
 
-    @asyncio.coroutine
-    def message(self, channel, string):
+    async def message(self, channel, string):
         """
         Shorthand version of client.send_message
         So that we don't have to arbitrarily type
@@ -151,25 +144,22 @@ class DiscordBot:
         self.logger.warning('Bot invite link [full permissions]: %s', url)
         return
 
-    @asyncio.coroutine
-    def set_status(self, string):
+    async def set_status(self, string):
         """Set the client's presence via a Game object"""
-        status = yield from self.client.change_presence(game=Game(name=string))
+        status = await self.client.change_presence(activity=Game(name=string))
         return status
 
     def event_ready(self):
         """Change this event to change what happens on login"""
-        @asyncio.coroutine
-        def on_ready():
+        async def on_ready():
             self.display_invite_link()
-            yield from self.set_status(self.STATUS)
+            await self.set_status(self.STATUS)
             self.logger.info('Connection status: {0}'.format(self.client.is_logged_in))
         return on_ready
 
     def event_error(self):
         """"Change this for better error logging if needed"""
-        @asyncio.coroutine
-        def on_error(evt, *args, **_):
+        async def on_error(evt, *args, **_):
             exc_type, exc_value, exc_traceback = sys.exc_info()
             self.logger.error('Discord error in \'{0}\', {1}'.format(evt, traceback.format_exc()))
 
@@ -178,7 +168,7 @@ class DiscordBot:
                 if hasattr(args_obj, 'channel'):
                     error_message = 'A wild `{0}` appears... It uses `{1}`, It\'s super effective!'\
                         .format(exc_type.__name__, exc_value)
-                    yield from self.message(args_obj.channel, error_message)
+                    await self.message(args_obj.channel, error_message)
                 else:
                     self.logger.warning('No channel found in exception, object is: %s', type(args_obj))
             else:
@@ -187,9 +177,7 @@ class DiscordBot:
         return on_error
 
     def event_message(self):
-        """Change this to change overall on message behavior"""
-        @asyncio.coroutine
-        def on_message(msg):
+        async def on_message(msg):
             self.logger.debug('Recieved message: %s', msg)
 
             # Ignoring our own messages
@@ -198,7 +186,7 @@ class DiscordBot:
 
             # Call all message listeners
             for listener in self.MESSAGE_LISTENERS:
-                yield from listener(self, msg)
+                await listener(self, msg)
 
             # Parse the message for special commands
             args = msg.content.strip().split(' ')
@@ -207,20 +195,19 @@ class DiscordBot:
             # Owner actions
             if self.is_owner(msg.author):
                 if key in self.OWNER_ACTIONS:
-                    result = yield from self.OWNER_ACTIONS[key](self, args, msg)
-                    return result
+                    await self.OWNER_ACTIONS[key](self, args, msg)
+                    return
 
             # Admin actions
             if self.is_admin(msg.author):
                 if key in self.ADMIN_ACTIONS:
-                    result = yield from self.ADMIN_ACTIONS[key](self, args, msg)
-                    return result
+                    await self.ADMIN_ACTIONS[key](self, args, msg)
+                    return
 
             # Standart actions
             if key in self.ACTIONS:
-                result = yield from self.ACTIONS[key](self, args, msg)
-                return result
-            return
+                await self.ACTIONS[key](self, args, msg)
+                return
         return on_message
 
     def setup_events(self):

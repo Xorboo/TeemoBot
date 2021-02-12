@@ -1,13 +1,13 @@
 import sys
 from logging_settings import logging
-# from pid.decorator import pidfile
+from pid.decorator import pidfile
 from elo_bot import EloBot
 
 
 # from users_c import UsersC
 
 
-# @pidfile()
+@pidfile()
 def main():
     logger = logging.getLogger(__name__)
 

@@ -395,7 +395,7 @@ class EloBot(DiscordBot):
 
         self.logger.info('Sending generic help')
         prefix = '# Доступные команды:\n\n'
-        postfix = '\nВведи \'{0}help <command>\' для получения большей инфы по каждой команде.' \
+        postfix = '\nВведи \'{0}help <Команда>\' для получения большей инфы по каждой команде.' \
             .format(DiscordBot.PREFIX)
 
         full_text = self.get_help_string(prefix, postfix, self.ACTIONS)
@@ -864,14 +864,13 @@ class EloBot(DiscordBot):
     @DiscordBot.action('')
     async def update(self, _, mobj):
         channel = mobj.channel
-        await self.client.send_typing(channel)
-
-        member = mobj.author
-        user = self.users.get_user(member)
-        if user and user.has_data:
-            await self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
-        else:
-            await self.message(channel, 'Сначала поставь себе ник через `!nick`, {0}'.format(member.mention))
+        async with channel.typing():
+            member = mobj.author
+            user = self.users.get_user(member)
+            if user and user.has_data:
+                await self.update_user(member, user, channel, check_is_conflicted=True, silent=False)
+            else:
+                await self.message(channel, 'Сначала поставь себе ник через `!nick`, {0}'.format(member.mention))
 
     @DiscordBot.action('')
     async def confirm(self, _, mobj):
@@ -884,29 +883,29 @@ class EloBot(DiscordBot):
             await self.message(mobj.channel, self.private_message_error)
             return
 
-        await self.client.send_typing(mobj.channel)
-        server = self.users.get_or_create_server(mobj.channel.guild.id)
-        user_data = server.get_user(mobj.author.id)
-        if not user_data:
-            reply = '{0}, у тебя не установлен игровой ник, используй `!nick` для этого'.format(mobj.author.mention)
-            await self.message(mobj.channel, reply)
-            return
+        async with mobj.channel.typing():
+            server = self.users.get_or_create_server(mobj.channel.guild.id)
+            user_data = server.get_user(mobj.author.id)
+            if not user_data:
+                reply = '{0}, у тебя не установлен игровой ник, используй `!nick` для этого'.format(mobj.author.mention)
+                await self.message(mobj.channel, reply)
+                return
 
-        bind_hash = user_data.bind_hash
-        region = server.parameters.get_region()
-        if not user_data.game_id:
-            await self.message(mobj.channel, 'У тебя устаревшие данные, выполни сначала команду `!nick`'
-                               .format(mobj.author.mention))
-            return
+            bind_hash = user_data.bind_hash
+            region = server.parameters.get_region()
+            if not user_data.game_id:
+                await self.message(mobj.channel, 'У тебя устаревшие данные, выполни сначала команду `!nick`'
+                                   .format(mobj.author.mention))
+                return
 
-        has_correct_code, current_code = self.riot_api.check_user_verification(user_data.game_id, bind_hash, region)
-        if has_correct_code:
-            await self.confirm_user(user_data, server, mobj.author, mobj.channel)
-        else:
-            fail_reply = '{0}, поменяй код верификации (`Настройки->About->Verification` в клиенте) на `{1}` ' \
-                         'для подтверждения, подожди минуту (он иногда тормозит) и повтори команду. ' \
-                         'Сейчас у тебя стоит код `{2}`'.format(mobj.author.mention, bind_hash, current_code)
-            await self.message(mobj.channel, fail_reply)
+            has_correct_code, current_code = self.riot_api.check_user_verification(user_data.game_id, bind_hash, region)
+            if has_correct_code:
+                await self.confirm_user(user_data, server, mobj.author, mobj.channel)
+            else:
+                fail_reply = '{0}, поменяй код верификации (`Настройки->About->Verification` в клиенте) на `{1}` ' \
+                             'для подтверждения, подожди минуту (он иногда тормозит) и повтори команду. ' \
+                             'Сейчас у тебя стоит код `{2}`'.format(mobj.author.mention, bind_hash, current_code)
+                await self.message(mobj.channel, fail_reply)
 
     async def confirm_user(self, user_data, server, author, channel, silent=False):
         conflicted_users = self.users.confirm_user(user_data, server)

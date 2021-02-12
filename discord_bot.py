@@ -125,7 +125,8 @@ class DiscordBot:
                                     'create file with the token key in \'%s\', error: %s', token_file_path, e)
         return token
 
-    async def message(self, channel, string):
+    @staticmethod
+    async def message(channel, string):
         """
         Shorthand version of client.send_message
         So that we don't have to arbitrarily type
